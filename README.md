@@ -1,3 +1,26 @@
+Setup
+
+1) Local (Docker Postgres)
+- DATABASE_URL=postgresql://postgres:postgres@localhost:5433/halisaha?schema=public
+- docker run --name halisaha-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=halisaha -p 5433:5432 -d postgres:16
+- npm i
+- npx prisma migrate deploy
+- npm run dev
+
+2) Production (Vercel + Neon)
+- Vercel envs:
+  - DATABASE_URL=postgresql://... (Neon pooled, sslmode=require)
+  - NEXT_PUBLIC_VAPID_PUBLIC_KEY=...
+  - VAPID_PUBLIC_KEY=...
+  - VAPID_PRIVATE_KEY=...
+  - VAPID_EMAIL=mailto:you@example.com
+- vercel.json includes daily cron /api/cron/cleanup
+
+Web Push
+- Generate VAPID keys (one-off):
+  - node -e "const webpush=require('web-push');const v=webpush.generateVAPIDKeys();console.log(v)"
+- Add keys to envs as above.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

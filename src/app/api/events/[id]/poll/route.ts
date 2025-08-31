@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import webpush from 'web-push';
 
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -25,6 +26,24 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
       }
     }
     await prisma.mVPPoll.update({ where: { id: poll.id }, data: { finalized: true } });
+
+    // Send push notification once per poll
+    if (!poll.finalized && !poll['notifSent' as keyof typeof poll]) {
+      const subs = await prisma.pushSubscription.findMany();
+      const payload = JSON.stringify({ title: 'MVP Sonuçlandı', body: 'MVP sonuçları açıklandı. Kontrol et!' });
+      const vapidPublic = process.env.VAPID_PUBLIC_KEY;
+      const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
+      const vapidEmail = process.env.VAPID_EMAIL || 'mailto:admin@example.com';
+      if (vapidPublic && vapidPrivate) {
+        webpush.setVapidDetails(vapidEmail, vapidPublic, vapidPrivate);
+        await Promise.all(subs.map(async (s) => {
+          try {
+            await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } } as any, payload);
+          } catch {}
+        }));
+      }
+      await prisma.mVPPoll.update({ where: { id: poll.id }, data: { notifSent: true } });
+    }
   }
   const result = await prisma.mVPPoll.findUnique({ where: { eventId: id }, include: { votes: true } });
   return NextResponse.json(result);
