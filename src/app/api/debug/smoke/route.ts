@@ -5,6 +5,9 @@ type SmokeStep = Record<string, unknown>;
 type SmokeResult = { ok: boolean; steps: SmokeStep[] };
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'disabled' }, { status: 404 });
+  }
   const result: SmokeResult = { ok: true, steps: [] };
   try {
     // 1) Create event

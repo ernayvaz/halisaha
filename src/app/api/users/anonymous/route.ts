@@ -18,20 +18,19 @@ export async function POST(req: NextRequest) {
   const { handle, displayName } = (await req.json()) as { handle: string; displayName?: string };
   if (!handle) return NextResponse.json({ error: 'handle required' }, { status: 400 });
 
+  const cookieStore = await cookies();
+  let deviceToken = cookieStore.get('device_token')?.value;
+
   const existing = await prisma.user.findUnique({ where: { handle } });
   if (existing) {
-    // bind existing user to device token if not bound
-    const cookieStore = await cookies();
-    let deviceToken = cookieStore.get('device_token')?.value;
+    // Allow binding only if this device is already associated with that user
     if (!deviceToken) {
-      deviceToken = randomToken(40);
-      cookieStore.set('device_token', deviceToken, { httpOnly: true, sameSite: 'lax', maxAge: 31536000 });
+      return NextResponse.json({ error: 'handle_taken' }, { status: 409 });
     }
-    await prisma.device.upsert({
-      where: { deviceToken },
-      update: { userId: existing.id },
-      create: { deviceToken, userId: existing.id },
-    });
+    const device = await prisma.device.findUnique({ where: { deviceToken } });
+    if (!device || device.userId !== existing.id) {
+      return NextResponse.json({ error: 'handle_taken' }, { status: 409 });
+    }
     return NextResponse.json(existing);
   }
 
@@ -42,11 +41,9 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const cookieStore = await cookies();
-  let deviceToken = cookieStore.get('device_token')?.value;
   if (!deviceToken) {
     deviceToken = randomToken(40);
-    cookieStore.set('device_token', deviceToken, { httpOnly: true, sameSite: 'lax', maxAge: 31536000 });
+    cookieStore.set('device_token', deviceToken, { httpOnly: true, sameSite: 'lax', maxAge: 31536000, secure: process.env.NODE_ENV === 'production' });
   }
   await prisma.device.upsert({
     where: { deviceToken },

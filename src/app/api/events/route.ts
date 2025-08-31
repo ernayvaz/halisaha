@@ -41,4 +41,13 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(event, { status: 201 });
 }
 
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const code = searchParams.get('code');
+  if (!code) return NextResponse.json({ error: 'code required' }, { status: 400 });
+  const event = await prisma.event.findUnique({ where: { code } });
+  if (!event) return NextResponse.json({ error: 'not found' }, { status: 404 });
+  return NextResponse.json(event);
+}
+
 

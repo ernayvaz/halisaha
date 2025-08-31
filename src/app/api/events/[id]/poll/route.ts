@@ -7,7 +7,6 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
   if (!poll) return NextResponse.json({ error: 'not found' }, { status: 404 });
   const now = new Date();
   if (now > poll.endsAt && !poll.finalized) {
-    // finalize: find top-voted participant and assign/update badge
     const tally = new Map<string, number>();
     for (const v of poll.votes) tally.set(v.targetParticipantId, (tally.get(v.targetParticipantId) || 0) + 1);
     let best: { pid: string; count: number } | null = null;

@@ -58,7 +58,7 @@ export default function EventLanding() {
   useEffect(() => {
     const code = params?.code as string;
     if (!code) return;
-    fetch(`/api/events/${code}`).then(async (r) => {
+    fetch(`/api/events?code=${encodeURIComponent(code)}`).then(async (r) => {
       if (!r.ok) return;
       const d = await r.json();
       setEventData(d);

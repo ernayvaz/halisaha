@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { rateLimit } from '@/lib/rateLimit';
 
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -12,6 +13,11 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const ip = req.headers.get('x-forwarded-for') || 'local';
+  if (!rateLimit(`join:${ip}`, 20, 60_000)) {
+    return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
+  }
+
   const { userId, guestName, mode } = (await req.json()) as {
     userId?: string;
     guestName?: string;
@@ -26,11 +32,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ ok: true });
   }
 
+  if (event.rosterLocked) {
+    return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
+  }
+
   if (!userId && !guestName) {
     return NextResponse.json({ error: 'userId or guestName required' }, { status: 400 });
   }
 
-  // Prevent duplicate joins for same user
   if (userId) {
     const exists = await prisma.participant.findFirst({ where: { eventId: id, userId } });
     if (exists) return NextResponse.json(exists);

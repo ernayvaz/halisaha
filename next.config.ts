@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const isProd = process.env.NODE_ENV === 'production';
+
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
@@ -10,10 +12,10 @@ const securityHeaders = [
   {
     key: 'Content-Security-Policy',
     value: [
-      "default-src 'self'", // base
+      "default-src 'self'",
       "img-src 'self' data:",
-      "style-src 'self' 'unsafe-inline'", // Tailwind inline var usage
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // dev compat; tighten in prod
+      "style-src 'self' 'unsafe-inline'",
+      isProd ? "script-src 'self'" : "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
       "connect-src 'self'",
       "font-src 'self' data:",
       "object-src 'none'",

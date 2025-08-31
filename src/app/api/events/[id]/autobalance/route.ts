@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { rateLimit } from '@/lib/rateLimit';
 
 type Method = 'snake' | 'greedy';
 
@@ -8,10 +9,15 @@ function scoreOf(u: { pace?: number | null; shoot?: number | null; pass?: number
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const ip = req.headers.get('x-forwarded-for') || 'local';
+  if (!rateLimit(`auto:${ip}`, 20, 60_000)) {
+    return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
+  }
   const { id } = await context.params;
   const { method, apply } = (await req.json()) as { method: Method; apply?: boolean };
   const event = await prisma.event.findUnique({ where: { id } });
   if (!event) return NextResponse.json({ error: 'event not found' }, { status: 404 });
+  if (apply && event.rosterLocked) return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
 
   const [team1, team2] = await Promise.all([
     prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Takım 1' } }),
@@ -38,7 +44,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     let toA = true;
     pool.forEach((x, i) => {
       if (toA) a.push(x.participantId); else b.push(x.participantId);
-      if (i % 2 === 0) toA = !toA; // AB, BA, AB...
+      if (i % 2 === 0) toA = !toA;
     });
   } else {
     let sumA = 0, sumB = 0;
@@ -49,9 +55,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   if (apply) {
-    // clear current assignments for both teams and apply new
     await prisma.$transaction([
       prisma.assignment.deleteMany({ where: { teamId: { in: [team1.id, team2.id] } } }),
+      prisma.lineupPosition.deleteMany({ where: { teamId: { in: [team1.id, team2.id] } } }),
       prisma.assignment.createMany({ data: a.map((pid) => ({ teamId: team1.id, participantId: pid })) }),
       prisma.assignment.createMany({ data: b.map((pid) => ({ teamId: team2.id, participantId: pid })) }),
     ]);

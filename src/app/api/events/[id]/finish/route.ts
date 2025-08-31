@@ -8,7 +8,7 @@ export async function POST(_: NextRequest, context: { params: Promise<{ id: stri
 
   const now = new Date();
   const startsAt = new Date(now.getTime() + 10 * 60 * 1000);
-  const endsAt = new Date(startsAt.getTime() + 30 * 60 * 1000); // 30 dk oylama
+  const endsAt = new Date(startsAt.getTime() + 30 * 60 * 1000);
 
   const poll = await prisma.mVPPoll.upsert({
     where: { eventId: id },

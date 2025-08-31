@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rateLimit';
 
-export async function POST(req: NextRequest, context: { params: Promise<{ pollId: string }> }) {
+export const POST: (req: NextRequest, context: { params: Promise<{ pollId: string }> }) => Promise<Response> = async (req, context) => {
   const ip = req.headers.get('x-forwarded-for') || 'local';
   if (!rateLimit(`vote:${ip}`, 30, 60_000)) {
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
@@ -20,6 +21,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ pollId
     create: { pollId, voterParticipantId, targetParticipantId },
   });
   return NextResponse.json(vote, { status: 201 });
-}
+};
 
 

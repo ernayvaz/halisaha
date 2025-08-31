@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { rateLimit } from '@/lib/rateLimit';
 
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -8,7 +9,15 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const ip = req.headers.get('x-forwarded-for') || 'local';
+  if (!rateLimit(`team:${ip}`, 30, 60_000)) {
+    return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
+  }
   const { id } = await context.params;
+  const event = await prisma.event.findUnique({ where: { id } });
+  if (!event) return NextResponse.json({ error: 'event not found' }, { status: 404 });
+  if (event.rosterLocked) return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
+
   const { index, name, color, formation } = (await req.json()) as { index: number; name: string; color?: string; formation?: string };
   if (index !== 1 && index !== 2) return NextResponse.json({ error: 'index must be 1 or 2' }, { status: 400 });
   const created = await prisma.team.upsert({
@@ -20,7 +29,15 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 }
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const ip = req.headers.get('x-forwarded-for') || 'local';
+  if (!rateLimit(`team:${ip}`, 30, 60_000)) {
+    return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
+  }
   const { id } = await context.params;
+  const event = await prisma.event.findUnique({ where: { id } });
+  if (!event) return NextResponse.json({ error: 'event not found' }, { status: 404 });
+  if (event.rosterLocked) return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
+
   const { index, name, color, formation } = (await req.json()) as { index: number; name?: string; color?: string; formation?: string };
   if (index !== 1 && index !== 2) return NextResponse.json({ error: 'index must be 1 or 2' }, { status: 400 });
   const team = await prisma.team.update({
