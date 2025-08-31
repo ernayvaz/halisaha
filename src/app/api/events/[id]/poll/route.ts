@@ -35,13 +35,15 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
       const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
       const vapidEmail = process.env.VAPID_EMAIL || 'mailto:admin@example.com';
       if (vapidPublic && vapidPrivate) {
-        webpush.setVapidDetails(vapidEmail, vapidPublic, vapidPrivate);
         type WebPushSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
+        type WebPushLib = { setVapidDetails: (email: string, pub: string, priv: string) => void; sendNotification: (sub: WebPushSubscription, payload?: string) => Promise<void> };
+        const wp = webpush as unknown as WebPushLib;
+        wp.setVapidDetails(vapidEmail, vapidPublic, vapidPrivate);
         await Promise.all(
           subs.map(async (s) => {
             try {
               const sub: WebPushSubscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
-              await webpush.sendNotification(sub as any, payload);
+              await wp.sendNotification(sub, payload);
             } catch {}
           })
         );
