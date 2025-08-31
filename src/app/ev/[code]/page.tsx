@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 type Event = {
@@ -338,7 +339,7 @@ export default function EventLanding() {
     a.click();
   };
 
-  if (error) return <main className="p-6 max-w-xl mx-auto"><p className="text-red-600">{error}</p><p className="mt-2"><a className="underline" href="/">Ana sayfaya dön</a></p></main>;
+  if (error) return <main className="p-6 max-w-xl mx-auto"><p className="text-red-600">{error}</p><p className="mt-2"><Link className="underline" href="/">Ana sayfaya dön</Link></p></main>;
   if (!eventData) return <main className="p-6 max-w-xl mx-auto">Yükleniyor…</main>;
 
   const team1 = teams.find((x) => x.index === 1);
