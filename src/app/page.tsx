@@ -10,14 +10,24 @@ export default function Home() {
   const [code, setCode] = useState<string | null>(null);
 
   const createEvent = async () => {
-    const res = await fetch('/api/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, date: date || undefined, startTime: startTime || undefined, durationMinutes }),
-    });
-    const data = await res.json();
-    if (res.ok) setCode(data.code);
-    else alert(data.error || 'Hata');
+    console.log('createEvent clicked');
+    try {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, date: date || undefined, startTime: startTime || undefined, durationMinutes }),
+      });
+      const text = await res.text();
+      let data: any = null;
+      try { data = text ? JSON.parse(text) : {}; } catch {
+        console.error('Non-JSON response:', text);
+      }
+      if (res.ok && data?.code) setCode(data.code);
+      else alert(data?.error || `Hata (status ${res.status})`);
+    } catch (e) {
+      console.error(e);
+      alert('Ağ veya sunucu hatası');
+    }
   };
 
   const link = code ? `${typeof window !== 'undefined' ? window.location.origin : ''}/ev/${code}` : '';
@@ -45,7 +55,7 @@ export default function Home() {
         </div>
       </div>
 
-      <button onClick={createEvent} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Oluştur</button>
+      <button type="button" onClick={createEvent} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">Oluştur</button>
 
       {code && (
         <div className="space-y-2">
