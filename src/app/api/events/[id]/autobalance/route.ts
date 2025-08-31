@@ -30,7 +30,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     orderBy: { joinedAt: 'asc' },
   });
 
-  const pool = participants.map((p) => ({
+  type ParticipantWithStats = { id: string; user: { pace: number | null; shoot: number | null; pass: number | null; defend: number | null } | null };
+  const pool = participants.map((p: ParticipantWithStats) => ({
     participantId: p.id,
     score: scoreOf({ pace: p.user?.pace, shoot: p.user?.shoot, pass: p.user?.pass, defend: p.user?.defend }),
   }));
