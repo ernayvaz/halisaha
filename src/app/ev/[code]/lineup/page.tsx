@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { subscribe, type RealtimeEvent } from '@/lib/realtime.client';
 
@@ -50,7 +50,7 @@ export default function LineupPage() {
       });
     })();
     return () => unsub();
-  }, [params?.code, selectedTeamIdx]);
+  }, [params?.code, selectedTeamIdx, teams]);
 
   const team = teams.find(x=>x.index===selectedTeamIdx);
   const tokenFor = (pid: string) => positions.find(p=>p.participantId===pid);

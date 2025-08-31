@@ -7,7 +7,7 @@ type Snapshot = { id: string; createdAt: string; ttlAt: string };
 
 export default function HistoryPage() {
   const params = useParams<{ code: string }>();
-  const [eventId, setEventId] = useState<string | null>(null);
+  const [_eventId, setEventId] = useState<string | null>(null);
   const [list, setList] = useState<Snapshot[]>([]);
 
   useEffect(() => {

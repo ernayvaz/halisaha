@@ -71,8 +71,8 @@ export default function TeamsPage() {
     }
   };
 
-  const team1 = useMemo(()=>team(1), [teams]);
-  const team2 = useMemo(()=>team(2), [teams]);
+  const team1 = team(1);
+  const team2 = team(2);
 
   if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
 

@@ -1,10 +1,11 @@
 "use client";
 
 import type { RealtimeEvent } from './realtime';
+import type PusherClient from 'pusher-js';
 
-let cachedClient: any | null | undefined;
+let cachedClient: PusherClient | null | undefined;
 
-async function getClient() {
+async function getClient(): Promise<PusherClient | null> {
   if (cachedClient !== undefined) return cachedClient;
   const key = process.env.NEXT_PUBLIC_PUSHER_KEY; const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER as string | undefined;
   if (!key || !cluster) { cachedClient = null; return cachedClient; }
@@ -18,7 +19,7 @@ async function getClient() {
 }
 
 export function subscribe(eventIdOrTeamId: string, onMessage: (evt: RealtimeEvent) => void) {
-  let unsub = () => {};
+  let unsub: () => void = () => {};
   (async () => {
     const c = await getClient();
     if (!c) return;
