@@ -8,7 +8,9 @@ export default function ServiceWorkerRegister() {
     if ('serviceWorker' in navigator) {
       const register = async () => {
         try {
-          await navigator.serviceWorker.register('/sw.js');
+          const reg = await navigator.serviceWorker.register('/sw.js');
+          // Force an update check so new SW takes control quickly after deploy
+          try { await reg.update(); } catch {}
         } catch {
           // ignore
         }
