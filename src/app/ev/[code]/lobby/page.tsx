@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { subscribe, type RealtimeEvent } from '@/lib/realtime.client';
+import { subscribe } from '@/lib/realtime.client';
+import type { RealtimeEvent } from '@/lib/realtime';
 
 type Participant = { id: string; isGuest: boolean; guestName: string|null; role?: string; user?: { id: string; handle: string; displayName: string } };
 
