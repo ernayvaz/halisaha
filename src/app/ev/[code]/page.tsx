@@ -1,8 +1,4 @@
-"use client";
-
-import { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
 type Event = {
   id: string;
@@ -34,35 +30,19 @@ type Position = { id: string; teamId: string; participantId: string; x: number; 
 
 type Assignment = { id: string; teamId: string; participantId: string; participant: Participant };
 
-export default function EventLanding() {
-  const params = useParams<{ code: string }>();
-  const [eventData, setEventData] = useState<Event | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [handle, setHandle] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [availability, setAvailability] = useState<null | boolean>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [card, setCard] = useState<Card | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [guestName, setGuestName] = useState('');
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [selectedTeamIdx, setSelectedTeamIdx] = useState<1|2>(1);
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [autoMethod, setAutoMethod] = useState<'snake'|'greedy'>('greedy');
-  const [autoPreview, setAutoPreview] = useState<{ team1: string[]; team2: string[]; scoreA: number; scoreB: number } | null>(null);
-  const fieldRef = useRef<HTMLDivElement | null>(null);
-  const draggingRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
-  const [poll, setPoll] = useState<{ id: string; startsAt: string; endsAt: string; finalized: boolean; votes: { id: string; pollId: string; voterParticipantId: string; targetParticipantId: string }[] } | null>(null);
-  const [nowTick, setNowTick] = useState<number>(Date.now());
+export default function EventEntry({ params }: { params: { code: string } }) {
+  redirect(`/ev/${params.code}/landing`);
+}
 
   useEffect(() => {
     const code = params?.code as string;
     if (!code) return;
     const run = async () => {
       try {
-        const r = await fetch(`/api/events?code=${encodeURIComponent(code)}`);
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 10000);
+        const r = await fetch(`/api/events?code=${encodeURIComponent(code)}`, { signal: controller.signal });
+        clearTimeout(tid);
         if (!r.ok) {
           setError(r.status === 404 ? 'Etkinlik bulunamadı' : 'Yüklenirken hata oluştu');
           return;
@@ -70,7 +50,7 @@ export default function EventLanding() {
         const d = await r.json();
         setEventData(d);
         setError(null);
-      } catch {
+      } catch (e) {
         setError('Bağlantı hatası');
       }
     };
