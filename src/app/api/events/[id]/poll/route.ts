@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import webpush, { type PushSubscription as WebPushSubscription } from 'web-push';
+import webpush from 'web-push';
 
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -36,12 +36,15 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
       const vapidEmail = process.env.VAPID_EMAIL || 'mailto:admin@example.com';
       if (vapidPublic && vapidPrivate) {
         webpush.setVapidDetails(vapidEmail, vapidPublic, vapidPrivate);
-        await Promise.all(subs.map(async (s) => {
-          try {
-            const sub: WebPushSubscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } } as WebPushSubscription;
-            await webpush.sendNotification(sub, payload);
-          } catch {}
-        }));
+        type WebPushSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
+        await Promise.all(
+          subs.map(async (s) => {
+            try {
+              const sub: WebPushSubscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
+              await webpush.sendNotification(sub as any, payload);
+            } catch {}
+          })
+        );
       }
       await prisma.mVPPoll.update({ where: { id: poll.id }, data: { notifSent: true } });
     }
