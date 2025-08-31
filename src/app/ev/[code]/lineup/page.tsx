@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { subscribe } from '@/lib/realtime.client';
-import type { RealtimeEvent } from '@/lib/realtime';
+import type { RealtimeEvent } from '@/types/realtime';
 
 type Team = { id: string; index: 1|2; name: string; color: string };
 type Assignment = { id: string; teamId: string; participantId: string; participant: { isGuest: boolean; guestName: string|null; user?: { displayName: string; handle: string } } };

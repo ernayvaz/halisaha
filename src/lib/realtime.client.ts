@@ -1,6 +1,6 @@
 "use client";
 
-import type { RealtimeEvent } from './realtime';
+import type { RealtimeEvent } from '@/types/realtime';
 import type PusherClient from 'pusher-js';
 
 let cachedClient: PusherClient | null | undefined;
