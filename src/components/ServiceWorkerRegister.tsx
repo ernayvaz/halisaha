@@ -12,10 +12,10 @@ export default function ServiceWorkerRegister() {
           // Force an update check so new SW takes control quickly after deploy
           try { await reg.update(); } catch {}
 
-          // Web Push subscription
+          // Web Push subscription WITHOUT prompting the user.
+          // Only subscribe if permission was already granted earlier.
           try {
-            const permission = await Notification.requestPermission();
-            if (permission === 'granted') {
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
               const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
               if (vapid) {
                 const sub = await (await navigator.serviceWorker.ready).pushManager.subscribe({

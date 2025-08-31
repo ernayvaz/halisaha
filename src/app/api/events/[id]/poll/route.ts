@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import webpush from 'web-push';
+import webpush, { type PushSubscription as WebPushSubscription } from 'web-push';
 
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -38,7 +38,8 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
         webpush.setVapidDetails(vapidEmail, vapidPublic, vapidPrivate);
         await Promise.all(subs.map(async (s) => {
           try {
-            await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } } as any, payload);
+            const sub: WebPushSubscription = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } } as WebPushSubscription;
+            await webpush.sendNotification(sub, payload);
           } catch {}
         }));
       }
