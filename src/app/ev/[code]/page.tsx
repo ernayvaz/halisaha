@@ -36,6 +36,7 @@ type Assignment = { id: string; teamId: string; participantId: string; participa
 export default function EventLanding() {
   const params = useParams<{ code: string }>();
   const [eventData, setEventData] = useState<Event | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [handle, setHandle] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [availability, setAvailability] = useState<null | boolean>(null);
@@ -58,11 +59,21 @@ export default function EventLanding() {
   useEffect(() => {
     const code = params?.code as string;
     if (!code) return;
-    fetch(`/api/events?code=${encodeURIComponent(code)}`).then(async (r) => {
-      if (!r.ok) return;
-      const d = await r.json();
-      setEventData(d);
-    });
+    const run = async () => {
+      try {
+        const r = await fetch(`/api/events?code=${encodeURIComponent(code)}`);
+        if (!r.ok) {
+          setError(r.status === 404 ? 'Etkinlik bulunamadı' : 'Yüklenirken hata oluştu');
+          return;
+        }
+        const d = await r.json();
+        setEventData(d);
+        setError(null);
+      } catch {
+        setError('Bağlantı hatası');
+      }
+    };
+    run();
   }, [params?.code]);
 
   useEffect(() => {
@@ -327,6 +338,7 @@ export default function EventLanding() {
     a.click();
   };
 
+  if (error) return <main className="p-6 max-w-xl mx-auto"><p className="text-red-600">{error}</p><p className="mt-2"><a className="underline" href="/">Ana sayfaya dön</a></p></main>;
   if (!eventData) return <main className="p-6 max-w-xl mx-auto">Yükleniyor…</main>;
 
   const team1 = teams.find((x) => x.index === 1);
