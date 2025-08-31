@@ -30,13 +30,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     orderBy: { joinedAt: 'asc' },
   });
 
-  type ParticipantWithStats = { id: string; user: { pace: number | null; shoot: number | null; pass: number | null; defend: number | null } | null };
-  const pool = participants.map((p: ParticipantWithStats) => ({
+  type PoolItem = { participantId: string; score: number };
+  const pool: PoolItem[] = participants.map((p: { id: string; user: { pace: number | null; shoot: number | null; pass: number | null; defend: number | null } | null }) => ({
     participantId: p.id,
     score: scoreOf({ pace: p.user?.pace, shoot: p.user?.shoot, pass: p.user?.pass, defend: p.user?.defend }),
   }));
 
-  pool.sort((a, b) => b.score - a.score);
+  pool.sort((a: PoolItem, b: PoolItem) => b.score - a.score);
 
   const a: string[] = [];
   const b: string[] = [];
