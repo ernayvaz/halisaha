@@ -1,0 +1,36 @@
+name: Smoke (Preview)
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  smoke-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        working-directory: app
+        run: npm ci || npm i --no-audit --no-fund
+
+      - name: Resolve Vercel preview URL
+        id: url
+        run: |
+          echo "::set-output name=preview_url::" # placeholder - integrate with vercel preview URL if available
+
+      - name: Run smoke against preview (skipped if URL missing)
+        if: ${{ steps.url.outputs.preview_url != '' }}
+        working-directory: app
+        env:
+          BASE: ${{ steps.url.outputs.preview_url }}
+        run: node scripts/smoke.mjs
+
