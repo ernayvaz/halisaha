@@ -254,8 +254,8 @@ export default function TeamsPage() {
     return res;
   };
 
-  const bubble = (name: string) => (
-    <div className="w-6 h-6 rounded-full bg-green-300 border-2 border-white shadow flex items-center justify-center text-[10px] text-black font-semibold" title={name}>
+  const bubble = (name: string, color?: string) => (
+    <div className="w-6 h-6 rounded-full border-2 border-white shadow flex items-center justify-center text-[10px] text-black font-semibold" style={{ backgroundColor: color || '#86efac' }} title={name}>
       {(name||'?').slice(0,1).toUpperCase()}
     </div>
   );
@@ -328,7 +328,7 @@ export default function TeamsPage() {
           return (
             <div key={a.id} className="absolute" style={{ left: `${posi.x*100}%`, top: `${posi.y*100}%`, transform:'translate(-50%,-50%)' }} onPointerDown={(e)=>onPointerDown(e, a.participantId)}>
               <div className="relative">
-                {bubble(label)}
+                {bubble(label, team.color)}
                 {!part.isGuest && (
                   <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
                 )}
@@ -363,13 +363,13 @@ export default function TeamsPage() {
       {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-        <div className="border rounded p-3 space-y-2">
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <label className="block text-sm">Guest Player</label>
+        <div className="border rounded p-3 space-y-3">
+          <div className="border rounded p-3 space-y-2 bg-black/10">
+            <h3 className="font-medium text-sm">Guest Player</h3>
+            <div className="flex items-end gap-2">
               <input id="guestNameTeams" className="border rounded p-2 w-full" placeholder="Guest Player name" />
+              <button onClick={()=>{ const el=document.getElementById('guestNameTeams') as HTMLInputElement; const v=el?.value?.trim(); if (v) addGuest(v); if (el) el.value=''; }} className="border px-3 py-2 rounded">Add Guest Player</button>
             </div>
-            <button onClick={()=>{ const el=document.getElementById('guestNameTeams') as HTMLInputElement; const v=el?.value?.trim(); if (v) addGuest(v); if (el) el.value=''; }} className="border px-3 py-2 rounded">Add Guest Player</button>
           </div>
           <h2 className="font-medium">Team 1</h2>
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
@@ -385,7 +385,7 @@ export default function TeamsPage() {
           <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
         </div>
         <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
-        <div className="border rounded p-3 space-y-2">
+        <div className="border rounded p-3 space-y-3">
           <h2 className="font-medium">Team 2</h2>
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
           <div className="flex items-center gap-2">
@@ -414,8 +414,9 @@ export default function TeamsPage() {
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
-                  <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1">→ 1</button>
-                  <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1">→ 2</button>
+                  <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: team1?.color || '#16a34a', color: '#fff' }}>→ 1</button>
+                  <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: team2?.color || '#16a34a', color: '#fff' }}>→ 2</button>
+                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
                 </div>
               </li>
             ))}
@@ -423,7 +424,7 @@ export default function TeamsPage() {
         </div>
         <div className="border rounded p-3 space-y-2">
           <h3 className="font-medium">Auto-balance</h3>
-          <AutoBalance eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
+          <AutoBalanceSingle eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
         </div>
       </section>
       {busy && <p className="text-sm text-gray-500">Processing…</p>}
@@ -431,28 +432,18 @@ export default function TeamsPage() {
   );
 }
 
-function AutoBalance({ eventId, rosterLocked, isOwner }: { eventId: string; rosterLocked: boolean; isOwner: boolean }) {
-  const [method, setMethod] = useState<'greedy'|'snake'>('greedy');
-  const [preview, setPreview] = useState<{ team1: string[]; team2: string[]; scoreA: number; scoreB: number } | null>(null);
-
-  const run = async (apply: boolean) => {
-    const r = await fetch(`/api/events/${eventId}/autobalance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method, apply }) });
+function AutoBalanceSingle({ eventId, rosterLocked, isOwner }: { eventId: string; rosterLocked: boolean; isOwner: boolean }) {
+  const [preview, setPreview] = useState<{ scoreA: number; scoreB: number } | null>(null);
+  const run = async () => {
+    const r = await fetch(`/api/events/${eventId}/autobalance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'greedy', apply: true }) });
     const d = await r.json();
-    setPreview({ team1: d.team1, team2: d.team2, scoreA: d.scoreA, scoreB: d.scoreB });
+    setPreview({ scoreA: d.scoreA, scoreB: d.scoreB });
   };
-
   return (
     <div className="space-y-2">
-      <select className="border rounded p-2" value={method} onChange={(e)=>setMethod(e.target.value as 'greedy'|'snake')}>
-        <option value="greedy">Greedy</option>
-        <option value="snake">Snake</option>
-      </select>
-      <div className="flex gap-2">
-        <button onClick={()=>run(false)} className="border px-3 py-2 rounded">Preview</button>
-        <button onClick={()=>run(true)} disabled={rosterLocked || !isOwner} className="bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded">Apply</button>
-      </div>
-      {rosterLocked && <p className="text-xs text-gray-500">Roster is locked. You can preview but cannot apply.</p>}
-      {preview && <p className="text-sm text-gray-600">Score A: {preview.scoreA} • Score B: {preview.scoreB}</p>}
+      <button onClick={run} disabled={rosterLocked || !isOwner} className="bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded">Auto-Balance</button>
+      {rosterLocked && <p className="text-xs text-gray-500">Roster is locked. Auto-balance is disabled.</p>}
+      {preview && <p className="text-sm text-gray-600">Balanced • Score A: {preview.scoreA} • Score B: {preview.scoreB}</p>}
     </div>
   );
 }
