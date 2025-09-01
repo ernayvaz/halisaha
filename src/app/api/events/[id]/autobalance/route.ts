@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rateLimit';
+import { publish } from '@/lib/realtime';
+import { cookies } from 'next/headers';
 
 type Method = 'snake' | 'greedy';
 
 function scoreOf(u: { pace?: number | null; shoot?: number | null; pass?: number | null; defend?: number | null }) {
   return (u.pace ?? 1) + (u.shoot ?? 1) + (u.pass ?? 1) + (u.defend ?? 1);
+}
+
+async function ensureOwner(eventId: string) {
+  const cookieStore = await cookies();
+  const deviceToken = cookieStore.get('device_token')?.value;
+  if (!deviceToken) return false;
+  const device = await prisma.device.findUnique({ where: { deviceToken }, select: { userId: true } });
+  if (!device?.userId) return false;
+  const me = await prisma.participant.findFirst({ where: { eventId, userId: device.userId } });
+  return me?.role === 'owner';
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -18,10 +30,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const event = await prisma.event.findUnique({ where: { id } });
   if (!event) return NextResponse.json({ error: 'event not found' }, { status: 404 });
   if (apply && event.rosterLocked) return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
+  if (apply && !(await ensureOwner(id))) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const [team1, team2] = await Promise.all([
-    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Takım 1' } }),
-    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Takım 2' } })
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Team 1' } }),
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Team 2' } })
   ]);
 
   const participants = await prisma.participant.findMany({
@@ -45,13 +58,23 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     let toA = true;
     pool.forEach((x, i) => {
       if (toA) a.push(x.participantId); else b.push(x.participantId);
-      if (i % 2 === 0) toA = !toA;
+      if (i % 2 === 0) toA = !toA; // A, B, B, A, A, B, B, A, ...
     });
   } else {
+    // Greedy with fairer tie-breaks: minimize absolute diff, prefer smaller team size when diff equal
     let sumA = 0, sumB = 0;
     for (const x of pool) {
-      if (sumA <= sumB) { a.push(x.participantId); sumA += x.score; }
-      else { b.push(x.participantId); sumB += x.score; }
+      const diffIfA = Math.abs((sumA + x.score) - sumB);
+      const diffIfB = Math.abs(sumA - (sumB + x.score));
+      if (diffIfA < diffIfB) {
+        a.push(x.participantId); sumA += x.score;
+      } else if (diffIfB < diffIfA) {
+        b.push(x.participantId); sumB += x.score;
+      } else {
+        if (a.length < b.length) { a.push(x.participantId); sumA += x.score; }
+        else if (b.length < a.length) { b.push(x.participantId); sumB += x.score; }
+        else { a.push(x.participantId); sumA += x.score; }
+      }
     }
   }
 
@@ -62,6 +85,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       prisma.assignment.createMany({ data: a.map((pid) => ({ teamId: team1.id, participantId: pid })) }),
       prisma.assignment.createMany({ data: b.map((pid) => ({ teamId: team2.id, participantId: pid })) }),
     ]);
+    await publish({ type: 'assignments_updated', teamId: team1.id });
+    await publish({ type: 'assignments_updated', teamId: team2.id });
   }
 
   const sum = (ids: string[]) => ids.reduce((s, pid) => {

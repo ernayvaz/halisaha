@@ -45,6 +45,9 @@ model Event {
   status           String        @default("open")
   rosterLocked     Boolean       @default(false)
   lineupLocked     Boolean       @default(false)
+  preNotify3hSent  Boolean       @default(false)
+  preNotify2hSent  Boolean       @default(false)
+  preNotify1hSent  Boolean       @default(false)
   participants     Participant[]
   teams            Team[]
   polls            MVPPoll[]

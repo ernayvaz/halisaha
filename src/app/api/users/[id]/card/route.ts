@@ -21,7 +21,7 @@ function toInt(value: unknown): number | null {
 }
 
 function validateStats(input: unknown): StatsValidated {
-  if (typeof input !== 'object' || input === null) return { ok: false, error: 'Geçersiz gövde' };
+  if (typeof input !== 'object' || input === null) return { ok: false, error: 'Invalid payload' };
   const obj = input as Record<string, unknown>;
   const pace = toInt(obj.pace);
   const shoot = toInt(obj.shoot);
@@ -30,10 +30,10 @@ function validateStats(input: unknown): StatsValidated {
   const footRaw = obj.foot;
   const inRange = (x: number | null) => x !== null && Number.isInteger(x) && x >= 1 && x <= 5;
   if (!inRange(pace) || !inRange(shoot) || !inRange(pass) || !inRange(defend)) {
-    return { ok: false, error: 'Stats 1-5 arasında olmalı' };
+    return { ok: false, error: 'Stats must be between 1 and 5' };
   }
   if (footRaw !== 'L' && footRaw !== 'R') {
-    return { ok: false, error: 'Ayak L veya R olmalı' };
+    return { ok: false, error: "Foot must be 'L' or 'R'" };
   }
   return { ok: true, pace: pace!, shoot: shoot!, pass: pass!, defend: defend!, foot: footRaw };
 }

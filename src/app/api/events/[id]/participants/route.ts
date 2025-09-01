@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rateLimit';
+import { publish } from '@/lib/realtime';
 
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const participants = await prisma.participant.findMany({
     where: { eventId: id },
-    include: { user: { select: { id: true, handle: true, displayName: true } } },
+    include: { user: { select: { id: true, handle: true, displayName: true, badges: { where: { type: 'MVP' }, select: { level: true, count: true } } } } },
     orderBy: { joinedAt: 'asc' },
   });
   return NextResponse.json(participants);
@@ -57,6 +58,24 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       role,
     },
   });
+
+  // Auto-assign: create teams if missing, then put participant into the team with fewer members (tie -> random)
+  const [team1, team2] = await Promise.all([
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Team 1' } }),
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Team 2' } })
+  ]);
+  const [c1, c2] = await Promise.all([
+    prisma.assignment.count({ where: { teamId: team1.id } }),
+    prisma.assignment.count({ where: { teamId: team2.id } }),
+  ]);
+  let targetTeamId = team1.id;
+  if (c2 < c1) targetTeamId = team2.id;
+  else if (c1 === c2) targetTeamId = Math.random() < 0.5 ? team1.id : team2.id;
+  await prisma.assignment.upsert({ where: { teamId_participantId: { teamId: targetTeamId, participantId: participant.id } }, update: {}, create: { teamId: targetTeamId, participantId: participant.id } });
+
+  await publish({ type: 'participants_updated', eventId: id });
+  await publish({ type: 'assignments_updated', teamId: targetTeamId });
+  await publish({ type: 'teams_updated', eventId: id });
 
   return NextResponse.json(participant, { status: 201 });
 }

@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { subscribe } from '@/lib/realtime.client';
-import type { RealtimeEvent } from '@/types/realtime';
+import { subscribe, type RealtimeEvent } from '@/lib/realtime';
 
-type Participant = { id: string; isGuest: boolean; guestName: string|null; role?: string; user?: { id: string; handle: string; displayName: string } };
+type Participant = { id: string; isGuest: boolean; guestName: string|null; role?: string; user?: { id: string; handle: string; displayName: string; badges?: { level: number; count: number }[] } };
+type UserCard = { id: string; foot: "L"|"R"|null; pace: number|null; shoot: number|null; pass: number|null; defend: number|null };
 
 export default function Lobby() {
   const params = useParams<{ code: string }>();
   const [eventId, setEventId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [selected, setSelected] = useState<Participant | null>(null);
+  const [selectedCard, setSelectedCard] = useState<UserCard | null>(null);
 
   useEffect(() => {
     const code = params?.code as string;
@@ -37,6 +38,16 @@ export default function Lobby() {
     return () => unsub();
   }, [params?.code]);
 
+  useEffect(() => {
+    const loadCard = async () => {
+      setSelectedCard(null);
+      if (!selected?.user?.id) return;
+      const r = await fetch(`/api/users/${selected.user.id}/card`);
+      if (r.ok) setSelectedCard(await r.json());
+    };
+    loadCard();
+  }, [selected?.user?.id]);
+
   const addGuest = async (name: string) => {
     if (!eventId || !name) return;
     const r = await fetch(`/api/events/${eventId}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
@@ -46,6 +57,12 @@ export default function Lobby() {
     }
   };
 
+  const MVPBadge = ({ p }: { p: Participant }) => {
+    const b = p.user?.badges && p.user.badges[0];
+    if (!b) return null;
+    return <span title={`MVP Lv${b.level}`} className="ml-2 text-xs inline-flex items-center">🏅 Lv{b.level}</span>;
+  };
+
   return (
     <main className="p-6 max-w-2xl mx-auto space-y-6">
       <h1 className="text-xl font-semibold">Lobby</h1>
@@ -53,16 +70,17 @@ export default function Lobby() {
       <section className="space-y-3">
         <div className="flex gap-2 items-end">
           <div className="flex-1">
-            <label className="block text-sm">Add guest</label>
-            <input id="guestName" className="border rounded p-2 w-full" placeholder="Guest name" />
+            <label className="block text-sm">Guest Player</label>
+            <input id="guestName" className="border rounded p-2 w-full" placeholder="Guest Player name" />
           </div>
-          <button onClick={()=>{const v=(document.getElementById('guestName') as HTMLInputElement).value; addGuest(v); (document.getElementById('guestName') as HTMLInputElement).value='';}} className="border px-3 py-2 rounded">Add</button>
+          <button onClick={()=>{const v=(document.getElementById('guestName') as HTMLInputElement).value; addGuest(v); (document.getElementById('guestName') as HTMLInputElement).value='';}} className="border px-3 py-2 rounded">Add Guest Player</button>
         </div>
         <ul className="divide-y border rounded">
           {participants.map((p)=> (
             <li key={p.id} className="p-2 flex justify-between items-center">
               <button onClick={()=>setSelected(p)} className={`text-left ${p.role==='owner'?'font-bold text-gray-900':''}`}>
-                {p.isGuest ? (p.guestName || 'Guest') : (p.user?.displayName || p.user?.handle)}
+                {p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}
+                <MVPBadge p={p} />
                 {p.role==='owner' && <span className="ml-1 text-xs text-gray-500">(owner)</span>}
               </button>
             </li>
@@ -73,8 +91,17 @@ export default function Lobby() {
       {selected && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center" onClick={()=>setSelected(null)}>
           <div className="bg-white text-black rounded p-4 w-80" onClick={(e)=>e.stopPropagation()}>
-            <h2 className="text-lg font-semibold mb-2">Player Card</h2>
-            <p className="text-sm">{selected.isGuest ? (selected.guestName||'Guest') : (selected.user?.displayName || selected.user?.handle)}</p>
+            <h2 className="text-lg font-semibold mb-2">Player Profile Card</h2>
+            <p className="text-sm mb-2">{selected.isGuest ? (selected.guestName||'Guest Player') : (selected.user?.displayName || selected.user?.handle)}</p>
+            {!selected.isGuest && selectedCard && (
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-gray-500">Foot:</span> {selectedCard.foot || '-'}</div>
+                <div><span className="text-gray-500">Pace:</span> {selectedCard.pace ?? '-'}</div>
+                <div><span className="text-gray-500">Shoot:</span> {selectedCard.shoot ?? '-'}</div>
+                <div><span className="text-gray-500">Pass:</span> {selectedCard.pass ?? '-'}</div>
+                <div><span className="text-gray-500">Defend:</span> {selectedCard.defend ?? '-'}</div>
+              </div>
+            )}
             <button className="mt-4 border px-3 py-1 rounded" onClick={()=>setSelected(null)}>Close</button>
           </div>
         </div>

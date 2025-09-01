@@ -1,10 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { POST as RunTimers } from '../match-timers/route';
 
-export async function POST(_: NextRequest) {
-  const now = new Date();
-  const result = await prisma.historySnapshot.deleteMany({ where: { ttlAt: { lte: now } } });
-  return NextResponse.json({ deleted: result.count });
-}
+// Reuse the comprehensive cron handler to support single-cron setups
+export const POST = RunTimers;
+export const GET = RunTimers;
 
 

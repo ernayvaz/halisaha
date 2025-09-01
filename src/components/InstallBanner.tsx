@@ -37,9 +37,9 @@ export default function InstallBanner() {
   return (
     <div className="fixed bottom-4 inset-x-0 flex justify-center pointer-events-none">
       <div className="pointer-events-auto bg-white dark:bg-black border rounded shadow p-3 flex gap-2 items-center">
-        <span className="text-sm">Uygulamayı ana ekrana eklemek ister misin?</span>
-        <button onClick={onInstall} className="text-sm px-3 py-1 rounded bg-green-600 text-white">Yükle</button>
-        <button onClick={() => setVisible(false)} className="text-sm px-3 py-1 rounded border">Kapat</button>
+        <span className="text-sm">Add this app to your home screen?</span>
+        <button onClick={onInstall} className="text-sm px-3 py-1 rounded bg-green-600 text-white">Install</button>
+        <button onClick={() => setVisible(false)} className="text-sm px-3 py-1 rounded border">Close</button>
       </div>
     </div>
   );

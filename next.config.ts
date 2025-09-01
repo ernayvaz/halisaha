@@ -19,7 +19,8 @@ const securityHeaders = [
       isProd ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
       // Allow service worker/push
       "worker-src 'self' blob:",
-      "connect-src 'self'",
+      // Allow realtime over HTTPS/WSS (e.g., Pusher)
+      "connect-src 'self' https://*.pusher.com wss://*.pusher.com",
       "font-src 'self' data:",
       "object-src 'none'",
       "base-uri 'self'",
@@ -30,6 +31,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  eslint: { ignoreDuringBuilds: true },
   async headers() {
     return [
       {

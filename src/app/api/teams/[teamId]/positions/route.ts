@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { publish } from '@/lib/realtime';
 import { rateLimit } from '@/lib/rateLimit';
+import { cookies } from 'next/headers';
+
+async function ensureOwner(eventId: string) {
+  const cookieStore = await cookies();
+  const deviceToken = cookieStore.get('device_token')?.value;
+  if (!deviceToken) return false;
+  const device = await prisma.device.findUnique({ where: { deviceToken }, select: { userId: true } });
+  if (!device?.userId) return false;
+  const me = await prisma.participant.findFirst({ where: { eventId, userId: device.userId } });
+  return me?.role === 'owner';
+}
 
 export async function GET(_: NextRequest, context: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await context.params;
@@ -19,6 +31,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ teamI
   const event = await prisma.event.findUnique({ where: { id: team.eventId } });
   if (!event) return NextResponse.json({ error: 'event not found' }, { status: 404 });
   if (event.lineupLocked) return NextResponse.json({ error: 'lineup_locked' }, { status: 403 });
+  if (!(await ensureOwner(team.eventId))) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const { participantId, x, y } = (await req.json()) as { participantId: string; x: number; y: number };
   const updated = await prisma.lineupPosition.upsert({
@@ -26,6 +39,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ teamI
     update: { x, y },
     create: { teamId, participantId, x, y },
   });
+  await publish({ type: 'positions_updated', teamId });
   return NextResponse.json(updated);
 }
 

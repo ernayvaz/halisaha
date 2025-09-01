@@ -1,5 +1,5 @@
 import PusherServer from 'pusher';
-import type { RealtimeEvent } from '@/types/realtime';
+import PusherClient from 'pusher-js';
 
 export function getPusherServer() {
   const { PUSHER_APP_ID, PUSHER_KEY, PUSHER_SECRET, PUSHER_CLUSTER } = process.env as Record<string,string|undefined>;
@@ -12,6 +12,13 @@ export function getPusherClient() {
   if (!key || !cluster) return null as unknown as PusherClient;
   return new PusherClient(key, { cluster, forceTLS: true });
 }
+
+export type RealtimeEvent =
+  | { type: 'participants_updated'; eventId: string }
+  | { type: 'teams_updated'; eventId: string }
+  | { type: 'assignments_updated'; teamId: string }
+  | { type: 'positions_updated'; teamId: string }
+  | { type: 'flags_updated'; eventId: string };
 
 export async function publish(evt: RealtimeEvent) {
   const p = getPusherServer(); if (!p) return;
