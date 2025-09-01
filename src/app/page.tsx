@@ -117,8 +117,17 @@ export default function Home() {
           {errors.date && <p className="text-sm text-red-600 mt-1">{errors.date}</p>}
         </div>
         <div>
-          <label className="block text-sm font-medium">Start Time</label>
-          <input type="time" className="border rounded p-2 w-full" value={startTime} onChange={(e) => setStartTime(normalizeTime(e.target.value))} step={60} aria-label="HH:MM 24-hour" placeholder="HH:MM" />
+          <label className="sr-only">Start Time</label>
+          <input
+            type="text"
+            placeholder="HH:MM"
+            className="border rounded p-2 w-full"
+            value={startTime}
+            onChange={(e)=>setStartTime(maskTime(e.target.value))}
+            onBlur={(e)=>setStartTime(normalizeTime(e.target.value))}
+            inputMode="numeric"
+            aria-label="Start time HH:MM (24-hour)"
+          />
           {errors.startTime && <p className="text-sm text-red-600 mt-1">{errors.startTime}</p>}
         </div>
         <div>
