@@ -8,6 +8,11 @@ export const prisma: PrismaClient =
   global.__prisma__ ||
   new PrismaClient({
     log: ['error', 'warn'],
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL + '&connect_timeout=60&pool_timeout=60&socket_timeout=60'
+      }
+    }
   });
 
 if (process.env.NODE_ENV !== 'production') {
