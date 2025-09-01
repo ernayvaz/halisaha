@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      deployments: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,10 +23,24 @@ jobs:
         working-directory: app
         run: npm ci || npm i --no-audit --no-fund
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Resolve Vercel preview URL
         id: url
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          echo "::set-output name=preview_url::" # placeholder - integrate with vercel preview URL if available
+          repo="${GITHUB_REPOSITORY}"
+          sha="${GITHUB_SHA}"
+          dep=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$repo/deployments?ref=$sha&environment=Preview&per_page=1")
+          id=$(echo "$dep" | jq -r '.[0].id // empty')
+          if [ -z "$id" ]; then echo "preview_url=" >> $GITHUB_OUTPUT; exit 0; fi
+          st=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$repo/deployments/$id/statuses?per_page=1")
+          url=$(echo "$st" | jq -r '.[0].environment_url // empty')
+          echo "preview_url=$url" >> $GITHUB_OUTPUT
 
       - name: Run smoke against preview (skipped if URL missing)
         if: ${{ steps.url.outputs.preview_url != '' }}
