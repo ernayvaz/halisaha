@@ -299,15 +299,15 @@ export default function TeamsPage() {
     const clamp = (v:number,min:number,max:number)=>Math.min(Math.max(v,min),max);
     const onPointerDown = (e: React.PointerEvent<HTMLDivElement>, pid: string) => {
       if (!fieldRef.current) return;
-      if (eventData?.lineupLocked && isOwner) return;
+      if (eventData?.lineupLocked) return;
       draggingRef.current = { id: pid };
       try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
     };
     const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       if (!fieldRef.current || !draggingRef.current) return;
       const rect = fieldRef.current.getBoundingClientRect();
-      const x = clamp(((e as any).clientX - rect.left)/rect.width,0,1);
-      const y = clamp(((e as any).clientY - rect.top)/rect.height,0,1);
+      const x = clamp((e.clientX - rect.left)/rect.width,0,1);
+      const y = clamp((e.clientY - rect.top)/rect.height,0,1);
       const id = draggingRef.current.id;
       setPos(prev=>{
         const idx = prev.findIndex(p=>p.participantId===id);
@@ -355,8 +355,11 @@ export default function TeamsPage() {
 
   const addGuest = async (name: string) => {
     if (!eventData || !name) return;
-    const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
-    if (r.ok) {
+    try {
+      const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
+      if (!r.ok) throw new Error('guest add failed');
+    } finally {
+      // Always refresh lists to reflect latest state
       const [plist, tlist] = await Promise.all([
         fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()),
         fetch(`/api/events/${eventData.id}/teams`).then(r=>r.json()),
