@@ -9,8 +9,12 @@ export default function ServiceWorkerRegister() {
       const register = async () => {
         try {
           const reg = await navigator.serviceWorker.register('/sw.js');
-          // Force an update check so new SW takes control quickly after deploy
+          // Force an update check and activate updated SW ASAP
           try { await reg.update(); } catch {}
+          try {
+            const waiting = reg.waiting || (await navigator.serviceWorker.getRegistration())?.waiting;
+            if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
+          } catch {}
 
           // Web Push subscription WITHOUT prompting the user.
           // Only subscribe if permission was already granted earlier.
