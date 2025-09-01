@@ -33,8 +33,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (apply && !(await ensureOwner(id))) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const [team1, team2] = await Promise.all([
-    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Team 1', color: '#dc2626' } }),
-    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Team 2', color: '#f59e0b' } })
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Team 1' } }),
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Team 2' } })
   ]);
 
   const participants = await prisma.participant.findMany({

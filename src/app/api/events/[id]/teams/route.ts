@@ -33,8 +33,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   const { index, name, color, formation } = (await req.json()) as { index: number; name: string; color?: string; formation?: string };
   if (index !== 1 && index !== 2) return NextResponse.json({ error: 'index must be 1 or 2' }, { status: 400 });
-  const defaultColors = ['#dc2626', '#f59e0b']; // dark red, sunset yellow
-  const defaultColor = color || defaultColors[(index-1) % defaultColors.length];
+  const palette = ['#2563eb', '#db2777', '#f59e0b', '#8b5cf6', '#ef4444', '#0ea5e9'];
+  const defaultColor = color || palette[(index-1) % palette.length];
   const created = await prisma.team.upsert({
     where: { eventId_index: { eventId: id, index } },
     update: { name, color: color || undefined, formation: formation || undefined },
