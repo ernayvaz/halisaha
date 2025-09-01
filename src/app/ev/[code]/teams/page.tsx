@@ -384,7 +384,8 @@ export default function TeamsPage() {
       {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-        <div className="border rounded p-3 space-y-3">
+        <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          <div className="space-y-3">
           <h2 className="font-medium">Team 1</h2>
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
           <div className="flex items-center gap-2">
@@ -398,9 +399,22 @@ export default function TeamsPage() {
             ))}
           </select>
           <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
+          </div>
+          <div className="space-y-2">
+            <h3 className="font-medium">Team 1 Roster</h3>
+            <ul className="divide-y">
+              {asgnTeam1.map(a=> (
+                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
         <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
-        <div className="border rounded p-3 space-y-3">
+        <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          <div className="space-y-3">
           <h2 className="font-medium">Team 2</h2>
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
           <div className="flex items-center gap-2">
@@ -413,6 +427,18 @@ export default function TeamsPage() {
             ))}
           </select>
           <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
+          </div>
+          <div className="space-y-2">
+            <h3 className="font-medium">Team 2 Roster</h3>
+            <ul className="divide-y">
+              {asgnTeam2.map(a=> (
+                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
         <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
       </section>
@@ -445,7 +471,7 @@ export default function TeamsPage() {
           </ul>
         </div>
         <div>
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <TeamBalance eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
             <button onClick={async()=>{ if (!eventData) return; await fetch(`/api/events/${eventData.id}/snapshot`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ note: 'manual-save' }) }); alert('Saved'); }} className="border px-3 py-2 rounded">Save</button>
           </div>
