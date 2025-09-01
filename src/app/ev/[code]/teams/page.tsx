@@ -50,19 +50,21 @@ export default function TeamsPage() {
   function positionsForFormation(formation: string): { x:number; y:number }[] {
     const parts = formation.split('-').map((n)=>parseInt(n,10));
     const a = parts[1]||0, b = parts[2]||0, c = parts[3]||0;
-    const xs = [0.28, 0.56, 0.86];
+    // Rotated: y positions for vertical layout (goal top, midfield bottom)
+    const ys = [0.28, 0.56, 0.86];
     const spread = (count: number): number[] => {
       if (count <= 0) return [];
       if (count === 1) return [0.5];
-      const ys: number[] = [];
-      for (let i=0;i<count;i++) ys.push(0.2 + (i*(0.6/(count-1))));
-      return ys;
+      const xs: number[] = [];
+      for (let i=0;i<count;i++) xs.push(0.2 + (i*(0.6/(count-1))));
+      return xs;
     };
     const out: {x:number;y:number}[] = [];
-    out.push({ x: 0.14, y: 0.5 });
+    // Goalkeeper at top center
+    out.push({ x: 0.5, y: 0.14 });
     [a,b,c].forEach((cnt, idx)=>{
-      const ys = spread(cnt);
-      ys.forEach((y)=>out.push({ x: xs[idx], y }));
+      const xs = spread(cnt);
+      xs.forEach((x)=>out.push({ x, y: ys[idx] }));
     });
     return out;
   }
@@ -130,7 +132,7 @@ export default function TeamsPage() {
     (async () => {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
       unsub = subscribe(e.id, (evt: RealtimeEvent)=>{
-        if (evt.type==='teams_updated' || evt.type==='assignments_updated' || evt.type==='flags_updated' || evt.type==='positions_updated') {
+        if (evt.type==='teams_updated' || evt.type==='assignments_updated' || evt.type==='flags_updated' || evt.type==='positions_updated' || evt.type==='participants_updated') {
           gateIfNeeded(code);
           Promise.all([
             fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()).then(setParticipants),
@@ -216,15 +218,15 @@ export default function TeamsPage() {
     setBusy(false);
   };
 
-    const assign = async (idx: 1|2, participantId: string) => {
+  const assign = async (idx: 1|2, participantId: string) => {
     const t = team(idx);
     if (!t) return;
     
     // Check if player is already in the selected team
-    const from1 = asgnTeam1.find(a=>a.participantId===participantId);
-    const from2 = asgnTeam2.find(a=>a.participantId===participantId);
-    const participant = participants.find(p=>p.id===participantId);
-    if (!participant) return;
+      const from1 = asgnTeam1.find(a=>a.participantId===participantId);
+      const from2 = asgnTeam2.find(a=>a.participantId===participantId);
+      const participant = participants.find(p=>p.id===participantId);
+      if (!participant) return;
     
     // If player is already in the selected team, do nothing
     if ((idx === 1 && from1) || (idx === 2 && from2)) return;
@@ -402,12 +404,17 @@ export default function TeamsPage() {
     };
 
     return (
-      <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative w-full h-56 bg-green-700 rounded overflow-hidden">
+      <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative w-full h-48 bg-green-700 rounded overflow-hidden border-2 border-gray-300">
+        {/* Main field boundary */}
         <div className="absolute inset-2 border-2 border-white rounded-sm" />
-        <div className="absolute right-2 top-[15%] h-[70%] w-[28%] border-2 border-white" />
-        <div className="absolute right-2 top-[35%] h-[30%] w-[12%] border-2 border-white" />
-        <div className="absolute w-1.5 h-1.5 bg-white rounded-full" style={{ right: '18%', top: '50%', transform: 'translateY(-50%)' }} />
-        <div className="absolute top-1/2 -translate-y-1/2 -left-8 w-20 h-20 border-2 border-white rounded-full" />
+        {/* Goal area (top) */}
+        <div className="absolute top-2 left-[15%] w-[70%] h-[28%] border-2 border-white" />
+        {/* 6-yard box (top) */}
+        <div className="absolute top-2 left-[35%] w-[30%] h-[12%] border-2 border-white" />
+        {/* Penalty spot */}
+        <div className="absolute w-1.5 h-1.5 bg-white rounded-full" style={{ left: '50%', top: '18%', transform: 'translateX(-50%)' }} />
+        {/* Center circle */}
+        <div className="absolute left-1/2 -translate-x-1/2 -bottom-8 w-20 h-20 border-2 border-white rounded-full" />
 
         {asgn.map((a, i)=>{
           const posi = tokenPos(i, a.participantId);
@@ -421,11 +428,11 @@ export default function TeamsPage() {
                    showPlayerCard(part);
                  }}>
               <div className="relative cursor-pointer flex flex-col items-center">
-                <div className="relative">
-                  {bubble(label, team.color)}
-                  {!part.isGuest && (
-                    <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
-                  )}
+              <div className="relative">
+                {bubble(label, team.color)}
+                {!part.isGuest && (
+                  <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
+                )}
                 </div>
                 <div className="text-[8px] text-white font-medium mt-1 max-w-[50px] truncate bg-black/70 rounded px-1 text-center">
                   {label}
@@ -441,30 +448,14 @@ export default function TeamsPage() {
   const addGuest = async (name: string) => {
     if (!eventData || !name) return;
     
-    // Optimistic update - add guest immediately to UI
-    const tempGuest: Participant = {
-      id: `temp-${Date.now()}`,
-      isGuest: true,
-      guestName: name,
-      user: undefined
-    };
-    setParticipants(prev => [...prev, tempGuest]);
-    
     try {
       const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
       if (!r.ok) throw new Error('guest add failed');
       
-      // Refresh with real data
-      const [plist, tlist] = await Promise.all([
-        fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()),
-        fetch(`/api/events/${eventData.id}/teams`).then(r=>r.json()),
-      ]);
-      setParticipants(plist);
-      await refreshTeamData(eventData.id, tlist);
+      // Let realtime events handle the UI update automatically
+      // No manual refresh needed as realtime will trigger update
     } catch (error) {
       console.error('Failed to add guest:', error);
-      // Revert optimistic update on error
-      setParticipants(prev => prev.filter(p => p.id !== tempGuest.id));
     }
   };
 
@@ -489,65 +480,65 @@ export default function TeamsPage() {
           {/* Team 1 Box */}
           <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Team 1 Left: Settings */}
-            <div className="space-y-3">
+          <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <h2 className="font-medium">Team 1</h2>
+          <h2 className="font-medium">Team 1</h2>
                 <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#dc2626'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
                   if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#dc2626'; upsertTeam(1,{color:'#dc2626'}); } else { upsertTeam(1,{color:v}); } }} />
               </div>
-              <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
-              <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
-                {optionsForSize(size1).map(o=> (
-                  <option key={o.v} value={o.v}>{o.label}</option>
-                ))}
-              </select>
-              <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
-            </div>
+          <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
+          <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
+            {optionsForSize(size1).map(o=> (
+              <option key={o.v} value={o.v}>{o.label}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
+          </div>
             
             {/* Team 1 Right: Roster */}
-            <div className="space-y-2">
-              <h3 className="font-medium">Team 1 Roster</h3>
+          <div className="space-y-2">
+            <h3 className="font-medium">Team 1 Roster</h3>
               <ul className="space-y-1">
-                {asgnTeam1.map(a=> (
-                  <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                    <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              {asgnTeam1.map(a=> (
+                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                </li>
+              ))}
+            </ul>
           </div>
+        </div>
 
           {/* Team 2 Box */}
           <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Team 2 Left: Settings */}
-            <div className="space-y-3">
+          <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <h2 className="font-medium">Team 2</h2>
+          <h2 className="font-medium">Team 2</h2>
                 <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#f59e0b'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#f59e0b'; upsertTeam(2,{color:'#f59e0b'}); } else { upsertTeam(2,{color:v}); } }} />
               </div>
-              <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
-              <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
-                {optionsForSize(size2).map(o=> (
-                  <option key={o.v} value={o.v}>{o.label}</option>
-                ))}
-              </select>
-              <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
-            </div>
+          <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
+          <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
+            {optionsForSize(size2).map(o=> (
+              <option key={o.v} value={o.v}>{o.label}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
+          </div>
             
             {/* Team 2 Right: Roster */}
-            <div className="space-y-2">
-              <h3 className="font-medium">Team 2 Roster</h3>
+          <div className="space-y-2">
+            <h3 className="font-medium">Team 2 Roster</h3>
               <ul className="space-y-1">
-                {asgnTeam2.map(a=> (
-                  <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                    <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              {asgnTeam2.map(a=> (
+                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                </li>
+              ))}
+            </ul>
           </div>
+        </div>
         </div>
 
         {/* Right Column: Fields Stacked */}
@@ -556,7 +547,7 @@ export default function TeamsPage() {
           <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
           
           {/* Team 2 Field */}
-          <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
+        <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
         </div>
       </section>
 
@@ -582,7 +573,7 @@ export default function TeamsPage() {
                   )}
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
-                                <div className="flex gap-2">
+                <div className="flex gap-2">
                     {(() => { 
                       const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
                       const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
@@ -611,8 +602,8 @@ export default function TeamsPage() {
                         {teamName}
                       </button>; 
                     })()}
-                    <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
-                  </div>
+                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
+                </div>
               </li>
             ))}
           </ul>
