@@ -389,7 +389,8 @@ export default function TeamsPage() {
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
           <div className="flex items-center gap-2">
             <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#16a34a'} onChange={(e)=>upsertTeam(1,{color:e.target.value})} />
+            <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#16a34a'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
+              if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#2563eb'; upsertTeam(1,{color:'#2563eb'}); } else { upsertTeam(1,{color:v}); } }} />
           </div>
           <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
             {optionsForSize(size1).map(o=> (
@@ -404,7 +405,7 @@ export default function TeamsPage() {
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
           <div className="flex items-center gap-2">
             <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#16a34a'} onChange={(e)=>upsertTeam(2,{color:e.target.value})} />
+            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#16a34a'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#db2777'; upsertTeam(2,{color:'#db2777'}); } else { upsertTeam(2,{color:v}); } }} />
           </div>
           <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
             {optionsForSize(size2).map(o=> (
@@ -435,8 +436,8 @@ export default function TeamsPage() {
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
-                  <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: '#166534', color: '#fff' }}>→ 1</button>
-                  <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: '#166534', color: '#fff' }}>→ 2</button>
+                  {(() => { const c = team1?.color || '#16a34a'; const selected = asgnTeam1.some(a=>a.participantId===p.id); const bg = selected ? '#166534' : c; return <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: bg, color: textColorFor(bg) }}>→ 1</button>; })()}
+                  {(() => { const c = team2?.color || '#16a34a'; const selected = asgnTeam2.some(a=>a.participantId===p.id); const bg = selected ? '#166534' : c; return <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: bg, color: textColorFor(bg) }}>→ 2</button>; })()}
                   <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
                 </div>
               </li>
