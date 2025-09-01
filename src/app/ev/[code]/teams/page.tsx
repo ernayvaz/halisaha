@@ -420,14 +420,18 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            <button onClick={()=>{ setGuestOpen(true); setGuestName(''); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
+            <button onClick={async()=>{ if (!eventData) return; const count = participants.filter(p=>p.isGuest).length + 1; const defaultName = `Guest ${count}`; await addGuest(defaultName); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
           </div>
           <ul className="divide-y">
             {participants.map((p)=> (
               <li key={p.id} className="py-2 flex justify-between items-center">
                 <span className="flex items-center gap-1">
                   <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center" title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}>{(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}</div>
-                  <span className="text-sm">{p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}</span>
+                  {p.isGuest ? (
+                    <input className="text-sm bg-transparent border-b border-dashed focus:outline-none" defaultValue={p.guestName || `Guest`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); }} />
+                  ) : (
+                    <span className="text-sm">{p.user?.displayName || p.user?.handle}</span>
+                  )}
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
