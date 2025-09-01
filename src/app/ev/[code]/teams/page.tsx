@@ -338,13 +338,10 @@ export default function TeamsPage() {
           const posi = tokenPos(i, a.participantId);
           const label = labelFor(a.participantId);
           const part = a.participant;
-          const isT1 = !!asgnTeam1.find(x=>x.participantId===a.participantId);
-          const isT2 = !!asgnTeam2.find(x=>x.participantId===a.participantId);
-          const bg = isT1 ? '#166534' : isT2 ? '#166534' : undefined; // field green tone
           return (
             <div key={a.id} className="absolute" style={{ left: `${posi.x*100}%`, top: `${posi.y*100}%`, transform:'translate(-50%,-50%)' }} onPointerDown={(e)=>onPointerDown(e, a.participantId)}>
               <div className="relative">
-                {bubble(label, bg || team.color)}
+                {bubble(label, team.color)}
                 {!part.isGuest && (
                   <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
                 )}
@@ -392,7 +389,7 @@ export default function TeamsPage() {
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
           <div className="flex items-center gap-2">
             <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#16a34a'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (v==="#166534"||v==="#0a7f3f"||v==="#0f6"||v==="#008000") { alert('Please choose a color distinct from field green'); return; } upsertTeam(1,{color:v}); }} />
+            <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#16a34a'} onChange={(e)=>upsertTeam(1,{color:e.target.value})} />
           </div>
           <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
             {optionsForSize(size1).map(o=> (
@@ -407,7 +404,7 @@ export default function TeamsPage() {
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
           <div className="flex items-center gap-2">
             <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#16a34a'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (v==="#166534"||v==="#0a7f3f"||v==="#0f6"||v==="#008000") { alert('Please choose a color distinct from field green'); return; } upsertTeam(2,{color:v}); }} />
+            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#16a34a'} onChange={(e)=>upsertTeam(2,{color:e.target.value})} />
           </div>
           <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
             {optionsForSize(size2).map(o=> (
@@ -438,8 +435,8 @@ export default function TeamsPage() {
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
-                  {(() => { const c = team1?.color || '#16a34a'; return <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: c, color: textColorFor(c) }}>→ 1</button>; })()}
-                  {(() => { const c = team2?.color || '#16a34a'; return <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: c, color: textColorFor(c) }}>→ 2</button>; })()}
+                  <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: '#166534', color: '#fff' }}>→ 1</button>
+                  <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: '#166534', color: '#fff' }}>→ 2</button>
                   <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
                 </div>
               </li>
@@ -453,7 +450,7 @@ export default function TeamsPage() {
           </div>
         </div>
       </section>
-      {/* modal removed by requirement */}
+      {/* modal removed per requirement */}
       {busy && <p className="text-sm text-gray-500">Processing…</p>}
     </main>
   );

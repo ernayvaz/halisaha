@@ -117,7 +117,7 @@ export default function Home() {
           {errors.date && <p className="text-sm text-red-600 mt-1">{errors.date}</p>}
         </div>
         <div>
-          <label className="sr-only">Start Time</label>
+          <label className="block text-sm font-medium">Start Time</label>
           <input
             type="text"
             placeholder="HH:MM"
