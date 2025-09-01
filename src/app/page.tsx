@@ -58,7 +58,7 @@ function normalizeTime(input: string): string {
 
 export default function Home() {
   const [name, setName] = useState('Pickup Match');
-  const [date, setDate] = useState(''); // dd-mm-YYYY
+  const [date, setDate] = useState(''); // DD-MM-YYYY
   const [startTime, setStartTime] = useState(''); // HH:MM 24h
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [code, setCode] = useState<string | null>(null);
@@ -68,8 +68,15 @@ export default function Home() {
   const validate = useMemo(() => {
     const errs: Record<string, string> = {};
     if (!name || name.trim().length < 2) errs.name = 'Event name is required';
-    if (!date || !isValidDateDdMmYyyy(date)) errs.date = 'Date must be dd-mm-YYYY';
+    if (!date || !isValidDateDdMmYyyy(date)) errs.date = 'Date must be DD-MM-YYYY';
     if (!startTime || !isValidTimeHHMM(startTime)) errs.startTime = 'Start time must be HH:MM (24h)';
+    // Prevent past datetime in user's local timezone
+    const [dd, mm, yyyy] = (date||'').split('-').map((x)=>parseInt(x,10));
+    const [hh, mi] = (startTime||'').split(':').map((x)=>parseInt(x,10));
+    if (Number.isFinite(dd) && Number.isFinite(mm) && Number.isFinite(yyyy) && Number.isFinite(hh) && Number.isFinite(mi)) {
+      const local = new Date(yyyy, (mm-1), dd, hh, mi, 0, 0);
+      if (local.getTime() < Date.now()) errs.date = 'Date/time cannot be in the past';
+    }
     if (!Number.isFinite(Number(durationMinutes)) || durationMinutes <= 0 || durationMinutes > 300) errs.durationMinutes = 'Duration must be 1-300 minutes';
     return errs;
   }, [name, date, startTime, durationMinutes]);
@@ -96,7 +103,7 @@ export default function Home() {
 
   return (
     <main className="p-6 max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Create a Halısaha Event</h1>
+      <h1 className="text-2xl font-bold">Create Football Event ⚽</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -105,13 +112,13 @@ export default function Home() {
           {errors.name && <p className="text-sm text-red-600 mt-1">{errors.name}</p>}
         </div>
         <div>
-          <label className="block text-sm font-medium">Date (DD–MM–YYYY)</label>
-          <input placeholder="DD–MM–YYYY" className="border rounded p-2 w-full" value={date} onChange={(e) => setDate(maskDate(e.target.value))} onBlur={(e)=>setDate(normalizeDate(e.target.value))} inputMode="numeric" aria-label="Date in DD-MM-YYYY" />
+          <label className="block text-sm font-medium">Date</label>
+          <input type="date" className="border rounded p-2 w-full" value={(()=>{ const m=/^(\d{2})-(\d{2})-(\d{4})$/.exec(date); return m?`${m[3]}-${m[2]}-${m[1]}`:''; })()} onChange={(e)=>{ const v=e.target.value; const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v); setDate(m?`${m[3]}-${m[2]}-${m[1]}`:''); }} min={(()=>{ const now=new Date(); const y=now.getFullYear(); const mo=String(now.getMonth()+1).padStart(2,'0'); const d=String(now.getDate()).padStart(2,'0'); return `${y}-${mo}-${d}`; })()} aria-label="Date" />
           {errors.date && <p className="text-sm text-red-600 mt-1">{errors.date}</p>}
         </div>
         <div>
-          <label className="block text-sm font-medium">Start Time (HH:MM, 24‑hour)</label>
-          <input placeholder="HH:MM" className="border rounded p-2 w-full" value={startTime} onChange={(e) => setStartTime(maskTime(e.target.value))} onBlur={(e)=>setStartTime(normalizeTime(e.target.value))} inputMode="numeric" aria-label="Start time in HH:MM 24-hour" />
+          <label className="block text-sm font-medium">Start Time</label>
+          <input type="time" className="border rounded p-2 w-full" value={startTime} onChange={(e) => setStartTime(normalizeTime(e.target.value))} step={60} aria-label="Start time" />
           {errors.startTime && <p className="text-sm text-red-600 mt-1">{errors.startTime}</p>}
         </div>
         <div>
