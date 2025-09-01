@@ -113,35 +113,51 @@ export default function NicknamePage() {
             <div className="text-center font-semibold mb-2">{displayName || handle || 'Your Name'}</div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm">Foot</label>
-                <select className="border rounded p-2 w-full" value={ensureBase().foot ?? ''} onChange={(e)=>setCard({ ...ensureBase(), foot: e.target.value as 'L'|'R' })}>
-                  <option value="">Select</option>
-                  <option value="R">Right</option>
-                  <option value="L">Left</option>
-                </select>
-              </div>
-              <div>
                 <label className="block text-sm">Pace</label>
-                <select value={ensureBase().pace ?? 3} onChange={(e)=>setCard({ ...ensureBase(), pace: parseInt(e.target.value,10) })}>
-                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                <select className="border rounded p-2 w-full" value={ensureBase().pace ?? 3} onChange={(e)=>setCard({ ...ensureBase(), pace: parseInt(e.target.value||'3',10) })}>
+                  <option value={1}>1 - Slow</option>
+                  <option value={2}>2 - Below Average</option>
+                  <option value={3}>3 - Average</option>
+                  <option value={4}>4 - Fast</option>
+                  <option value={5}>5 - Very Fast</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm">Shoot</label>
-                <select value={ensureBase().shoot ?? 3} onChange={(e)=>setCard({ ...ensureBase(), shoot: parseInt(e.target.value,10) })}>
-                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                <select className="border rounded p-2 w-full" value={ensureBase().shoot ?? 3} onChange={(e)=>setCard({ ...ensureBase(), shoot: parseInt(e.target.value||'3',10) })}>
+                  <option value={1}>1 - Poor</option>
+                  <option value={2}>2 - Below Average</option>
+                  <option value={3}>3 - Average</option>
+                  <option value={4}>4 - Good</option>
+                  <option value={5}>5 - Excellent</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm">Pass</label>
-                <select value={ensureBase().pass ?? 3} onChange={(e)=>setCard({ ...ensureBase(), pass: parseInt(e.target.value,10) })}>
-                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                <select className="border rounded p-2 w-full" value={ensureBase().pass ?? 3} onChange={(e)=>setCard({ ...ensureBase(), pass: parseInt(e.target.value||'3',10) })}>
+                  <option value={1}>1 - Poor</option>
+                  <option value={2}>2 - Below Average</option>
+                  <option value={3}>3 - Average</option>
+                  <option value={4}>4 - Good</option>
+                  <option value={5}>5 - Excellent</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm">Defend</label>
-                <select value={ensureBase().defend ?? 3} onChange={(e)=>setCard({ ...ensureBase(), defend: parseInt(e.target.value,10) })}>
-                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                <select className="border rounded p-2 w-full" value={ensureBase().defend ?? 3} onChange={(e)=>setCard({ ...ensureBase(), defend: parseInt(e.target.value||'3',10) })}>
+                  <option value={1}>1 - Poor</option>
+                  <option value={2}>2 - Below Average</option>
+                  <option value={3}>3 - Average</option>
+                  <option value={4}>4 - Good</option>
+                  <option value={5}>5 - Excellent</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm">Preferred Foot</label>
+                <select className="border rounded p-2 w-full" value={ensureBase().foot ?? ''} onChange={(e)=>setCard({ ...ensureBase(), foot: e.target.value as 'L'|'R' })}>
+                  <option value="">Select your preferred foot</option>
+                  <option value="R">Right Foot</option>
+                  <option value="L">Left Foot</option>
                 </select>
               </div>
             </div>

@@ -24,13 +24,28 @@ export default function TeamsPage() {
   const [posTeam2, setPosTeam2] = useState<Position[]>([]);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
+  const [optimisticUpdate, setOptimisticUpdate] = useState<any>(null);
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
-  // Add state for loading
-  const [loading, setLoading] = useState(false);
-  // Add modal state
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
   const [playerCard, setPlayerCard] = useState<any>(null);
+
+  const showPlayerCard = async (participant: Participant) => {
+    setSelectedPlayer(participant);
+    setPlayerCard(null);
+    
+    if (!participant.isGuest && participant.user?.id) {
+      try {
+        const response = await fetch(`/api/users/${participant.user.id}/card`);
+        if (response.ok) {
+          const card = await response.json();
+          setPlayerCard(card);
+        }
+      } catch (error) {
+        console.error('Failed to load player card:', error);
+      }
+    }
+  };
 
   function positionsForFormation(formation: string): { x:number; y:number }[] {
     const parts = formation.split('-').map((n)=>parseInt(n,10));
@@ -158,39 +173,72 @@ export default function TeamsPage() {
   const team = (idx: 1|2) => teams.find(t=>t.index===idx) as Team | undefined;
 
   const upsertTeam = async (index: 1|2, partial: Partial<Pick<Team,'name'|'color'|'formation'>>) => {
-    if (!eventData || !isOwner) return;
+    if (!eventData || !isOwner || busy) return;
     setBusy(true);
-    const body = { index, name: partial.name ?? team(index)?.name ?? `Team ${index}`, color: partial.color ?? team(index)?.color, formation: partial.formation ?? team(index)?.formation };
-    const r = await fetch(`/api/events/${eventData.id}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const t = await r.json();
+    
+    // Optimistic update
+    const currentTeam = team(index);
+    const updatedTeam = { 
+      ...currentTeam, 
+      name: partial.name ?? currentTeam?.name ?? `Team ${index}`, 
+      color: partial.color ?? currentTeam?.color ?? '#16a34a',
+      formation: partial.formation ?? currentTeam?.formation ?? '1-2-2-1'
+    };
     const other = teams.filter(x=>x.index!==index);
-    setTeams([...other, t].sort((a,b)=>a.index-b.index));
+    setTeams([...other, updatedTeam as Team].sort((a,b)=>a.index-b.index));
+    
+    try {
+      const body = { index, name: partial.name ?? team(index)?.name ?? `Team ${index}`, color: partial.color ?? team(index)?.color, formation: partial.formation ?? team(index)?.formation };
+      const r = await fetch(`/api/events/${eventData.id}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const t = await r.json();
+      const finalOther = teams.filter(x=>x.index!==index);
+      setTeams([...finalOther, t].sort((a,b)=>a.index-b.index));
+    } catch (error) {
+      console.error('Team update failed:', error);
+      // Revert optimistic update on error
+      const revertOther = teams.filter(x=>x.index!==index);
+      setTeams([...revertOther, currentTeam as Team].sort((a,b)=>a.index-b.index));
+    }
     setBusy(false);
   };
 
   const assign = async (idx: 1|2, participantId: string) => {
     const t = team(idx);
     if (!t) return;
-    if (isOwner) {
-      await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
+    
+    // Optimistic update for immediate UI feedback
+    const from1 = asgnTeam1.find(a=>a.participantId===participantId);
+    const from2 = asgnTeam2.find(a=>a.participantId===participantId);
+    const participant = participants.find(p=>p.id===participantId);
+    if (!participant) return;
+    
+    const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
+    
+    // Immediate UI update
+    if (idx===1) {
+      if (!from1) setAsgnTeam1(prev=>[...prev, mkAssignment(t.id)]);
+      if (from2) setAsgnTeam2(prev=>prev.filter(a=>a.participantId!==participantId));
     } else {
-      const from1 = asgnTeam1.find(a=>a.participantId===participantId);
-      const from2 = asgnTeam2.find(a=>a.participantId===participantId);
-      const participant = participants.find(p=>p.id===participantId);
-      if (!participant) return;
-      const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
-      if (idx===1) {
-        if (!from1) setAsgnTeam1(prev=>[...prev, mkAssignment(t.id)]);
-        if (from2) setAsgnTeam2(prev=>prev.filter(a=>a.participantId!==participantId));
-      } else {
-        if (!from2) setAsgnTeam2(prev=>[...prev, mkAssignment(t.id)]);
-        if (from1) setAsgnTeam1(prev=>prev.filter(a=>a.participantId!==participantId));
-      }
-      const t1 = team1; const t2 = team2;
-      if (t1 && t2) {
-        const c1 = (idx===1 ? asgnTeam1.length + (from1?0:1) - (from1?0:0) - (from2?1:0) : asgnTeam1.length - (from1?1:0));
-        const c2 = (idx===2 ? asgnTeam2.length + (from2?0:1) - (from2?0:0) - (from1?1:0) : asgnTeam2.length - (from2?1:0));
-        setAssignmentsByTeam({ ...(assignmentsByTeam||{}), [t1.id]: Math.max(0,c1), [t2.id]: Math.max(0,c2) });
+      if (!from2) setAsgnTeam2(prev=>[...prev, mkAssignment(t.id)]);
+      if (from1) setAsgnTeam1(prev=>prev.filter(a=>a.participantId!==participantId));
+    }
+    
+    // Update counts immediately
+    const t1 = team1; const t2 = team2;
+    if (t1 && t2) {
+      const c1 = (idx===1 ? asgnTeam1.length + (from1?0:1) - (from1?0:0) - (from2?1:0) : asgnTeam1.length - (from1?1:0));
+      const c2 = (idx===2 ? asgnTeam2.length + (from2?0:1) - (from2?0:0) - (from1?1:0) : asgnTeam2.length - (from2?1:0));
+      setAssignmentsByTeam({ ...(assignmentsByTeam||{}), [t1.id]: Math.max(0,c1), [t2.id]: Math.max(0,c2) });
+    }
+
+    if (isOwner) {
+      // Background API call
+      try {
+        await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
+      } catch (error) {
+        // Revert on error
+        console.error('Assignment failed:', error);
+        await refreshTeamData(eventData!.id, teams);
       }
     }
   };
@@ -344,8 +392,13 @@ export default function TeamsPage() {
           const label = labelFor(a.participantId);
           const part = a.participant;
           return (
-            <div key={a.id} className="absolute" style={{ left: `${posi.x*100}%`, top: `${posi.y*100}%`, transform:'translate(-50%,-50%)' }} onPointerDown={(e)=>onPointerDown(e, a.participantId)}>
-              <div className="relative">
+            <div key={a.id} className="absolute" style={{ left: `${posi.x*100}%`, top: `${posi.y*100}%`, transform:'translate(-50%,-50%)' }} 
+                 onPointerDown={(e)=>onPointerDown(e, a.participantId)}
+                 onClick={(e) => {
+                   e.stopPropagation();
+                   showPlayerCard(part);
+                 }}>
+              <div className="relative cursor-pointer">
                 {bubble(label, team.color)}
                 {!part.isGuest && (
                   <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
@@ -372,12 +425,6 @@ export default function TeamsPage() {
       setParticipants(plist);
       await refreshTeamData(eventData.id, tlist);
     }
-  };
-
-  // Function to load card
-  const loadCard = async (userId: string) => {
-    const r = await fetch(`/api/users/${userId}/card`);
-    if (r.ok) setPlayerCard(await r.json());
   };
 
   if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
@@ -464,11 +511,15 @@ export default function TeamsPage() {
             {participants.map((p)=> (
               <li key={p.id} className="py-2 flex justify-between items-center">
                 <span className="flex items-center gap-1">
-                  <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center" title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}>{(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}</div>
+                  <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center cursor-pointer" 
+                       title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}
+                       onClick={() => showPlayerCard(p)}>
+                    {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
+                  </div>
                   {p.isGuest ? (
                     <input className="text-sm bg-transparent border-b border-dashed focus:outline-none" defaultValue={p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p)+1}`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); }} />
                   ) : (
-                    <span className="text-sm">{p.user?.displayName || p.user?.handle}</span>
+                    <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>{p.user?.displayName || p.user?.handle}</span>
                   )}
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
@@ -488,16 +539,72 @@ export default function TeamsPage() {
           </div>
         </div>
       </section>
-      {/* modal removed per requirement */}
-      {busy && <p className="text-sm text-gray-500">Processing…</p>}
+      
+      {/* Player Card Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-          <div className="bg-white p-4 rounded">
-            {/* Render card */}
-            <button onClick={() => setSelectedPlayer(null)}>Close</button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Player Card</h3>
+              <button onClick={() => setSelectedPlayer(null)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-green-600 text-white text-2xl flex items-center justify-center mx-auto mb-2">
+                {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
+              </div>
+              <h4 className="font-medium text-lg">
+                {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
+              </h4>
+              {(selectedPlayer as any).role === 'owner' && <span className="text-xs text-gray-500">(Owner)</span>}
+            </div>
+            
+            {selectedPlayer.isGuest ? (
+              <p className="text-center text-gray-500 text-sm">Guest player - no stats available</p>
+            ) : playerCard ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Pace</div>
+                  <div className="text-2xl font-bold text-blue-600">{playerCard.pace || '-'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Shoot</div>
+                  <div className="text-2xl font-bold text-red-600">{playerCard.shoot || '-'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Pass</div>
+                  <div className="text-2xl font-bold text-green-600">{playerCard.pass || '-'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Defend</div>
+                  <div className="text-2xl font-bold text-purple-600">{playerCard.defend || '-'}</div>
+                </div>
+                <div className="col-span-2 text-center">
+                  <div className="text-sm text-gray-500">Preferred Foot</div>
+                  <div className="text-lg font-medium">{playerCard.foot === 'L' ? 'Left' : playerCard.foot === 'R' ? 'Right' : '-'}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500">Loading player stats...</div>
+            )}
+            
+            {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
+              <div className="mt-4 text-center">
+                <div className="text-sm text-gray-500 mb-1">Badges</div>
+                <div className="flex justify-center gap-1">
+                  {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
+                    <span key={i} className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                      🏅 MVP Lv{badge.level}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
+      
+      {busy && <p className="text-sm text-gray-500">Processing…</p>}
     </main>
   );
 }

@@ -66,8 +66,8 @@ export async function POST(req: NextRequest) {
     const errors: Record<string, string> = {};
     if (!name || name.trim().length < 2) errors.name = 'Event name is required';
     if (!date) errors.date = 'Date (dd-mm-YYYY) is required';
-    const parsedDate = parseDateLoose(date);
-    if (date && !parsedDate) errors.date = 'Date must be in dd-mm-YYYY format';
+    const dateObj = parseDateLoose(date);
+    if (date && !dateObj) errors.date = 'Date must be in dd-mm-YYYY format';
     if (!startTime || !isValidTimeHHMM(startTime)) errors.startTime = 'Start time (HH:MM 24h) is required';
     const dur = typeof durationMinutes === 'number' ? durationMinutes : Number(durationMinutes);
     if (!Number.isFinite(dur) || dur <= 0 || dur > 300) errors.durationMinutes = 'Duration (minutes) must be between 1 and 300';
@@ -83,32 +83,37 @@ export async function POST(req: NextRequest) {
       code = shortCode();
     }
 
+    // Get current user to set as owner
+    const cookieStore = await cookies();
+    const deviceToken = cookieStore.get('device_token')?.value;
+    let ownerId: string | null = null;
+    
+    if (deviceToken) {
+      const device = await prisma.device.findUnique({ 
+        where: { deviceToken }, 
+        select: { userId: true } 
+      });
+      ownerId = device?.userId || null;
+    }
+
     const event = await prisma.event.create({
       data: {
         code,
         name: name || null,
-        date: parsedDate!,
+        date: dateObj!,
         startTime: startTime || null,
         durationMinutes: dur,
       },
     });
 
-    // Assign owner: use device cookie to get userId
-    const cookieStore = await cookies();
-    const deviceToken = cookieStore.get('device_token')?.value;
-    let ownerUserId = null;
-    if (deviceToken) {
-      const device = await prisma.device.findUnique({ where: { deviceToken }, select: { userId: true } });
-      ownerUserId = device?.userId;
-    }
-
-    // Create first participant as owner
-    if (ownerUserId) {
+    // If we have an owner, create a participant record immediately
+    if (ownerId) {
       await prisma.participant.create({
         data: {
           eventId: event.id,
-          userId: ownerUserId,
+          userId: ownerId,
           role: 'owner',
+          isGuest: false,
         },
       });
     }

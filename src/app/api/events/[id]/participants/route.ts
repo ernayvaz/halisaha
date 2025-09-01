@@ -51,8 +51,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (exists) return NextResponse.json(exists);
   }
 
-  const count = await prisma.participant.count({ where: { eventId: id } });
-  const role = 'player'; // No more auto-owner
+  // Check if there's already an owner for this event
+  const existingOwner = await prisma.participant.findFirst({ 
+    where: { eventId: id, role: 'owner' } 
+  });
+  const role = existingOwner ? 'player' : 'owner';
 
   const participant = await prisma.participant.create({
     data: {

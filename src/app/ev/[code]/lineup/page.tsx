@@ -22,6 +22,25 @@ export default function LineupPage() {
   const fieldRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef<{ id: string } | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
+  const [playerCard, setPlayerCard] = useState<any>(null);
+
+  const showPlayerCard = async (participant: any) => {
+    setSelectedPlayer(participant);
+    setPlayerCard(null);
+    
+    if (!participant.isGuest && participant.user?.id) {
+      try {
+        const response = await fetch(`/api/users/${participant.user.id}/card`);
+        if (response.ok) {
+          const card = await response.json();
+          setPlayerCard(card);
+        }
+      } catch (error) {
+        console.error('Failed to load player card:', error);
+      }
+    }
+  };
 
   useEffect(() => {
     const code = params?.code as string;
@@ -179,8 +198,13 @@ export default function LineupPage() {
             const pos = tokenFor(a.participantId) || getDefault(idx);
             const label = a.participant.isGuest ? (a.participant.guestName||'Guest') : (a.participant.user?.displayName || a.participant.user?.handle || 'Player');
             return (
-              <div key={a.id} className="absolute" style={{ left: `${pos.x*100}%`, top: `${pos.y*100}%`, transform:'translate(-50%,-50%)' }} onPointerDown={(e)=>onPointerDown(e, a.participantId)}>
-                <div className="w-8 h-8 rounded-full bg-green-600 border-2 border-white shadow" aria-label={`Player ${label}`} />
+              <div key={a.id} className="absolute cursor-pointer" style={{ left: `${pos.x*100}%`, top: `${pos.y*100}%`, transform:'translate(-50%,-50%)' }} 
+                   onPointerDown={(e)=>onPointerDown(e, a.participantId)}
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     showPlayerCard(a.participant);
+                   }}>
+                <div className="w-8 h-8 rounded-full bg-green-600 border-2 border-white shadow hover:bg-green-700" aria-label={`Player ${label}`} />
                 <div className="text-[10px] mt-1 text-center max-w-[72px] truncate">{label}</div>
               </div>
             );
@@ -189,6 +213,56 @@ export default function LineupPage() {
 
         <div className="mt-2 text-[10px] text-gray-500 text-right">{new Date().toLocaleString()}</div>
       </div>
+      
+      {/* Player Card Modal */}
+      {selectedPlayer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Player Card</h3>
+              <button onClick={() => setSelectedPlayer(null)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-green-600 text-white text-2xl flex items-center justify-center mx-auto mb-2">
+                {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
+              </div>
+              <h4 className="font-medium text-lg">
+                {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
+              </h4>
+            </div>
+            
+            {selectedPlayer.isGuest ? (
+              <p className="text-center text-gray-500 text-sm">Guest player - no stats available</p>
+            ) : playerCard ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Pace</div>
+                  <div className="text-2xl font-bold text-blue-600">{playerCard.pace || '-'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Shoot</div>
+                  <div className="text-2xl font-bold text-red-600">{playerCard.shoot || '-'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Pass</div>
+                  <div className="text-2xl font-bold text-green-600">{playerCard.pass || '-'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Defend</div>
+                  <div className="text-2xl font-bold text-purple-600">{playerCard.defend || '-'}</div>
+                </div>
+                <div className="col-span-2 text-center">
+                  <div className="text-sm text-gray-500">Preferred Foot</div>
+                  <div className="text-lg font-medium">{playerCard.foot === 'L' ? 'Left' : playerCard.foot === 'R' ? 'Right' : '-'}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500">Loading player stats...</div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
