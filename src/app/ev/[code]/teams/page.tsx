@@ -24,8 +24,7 @@ export default function TeamsPage() {
   const [posTeam2, setPosTeam2] = useState<Position[]>([]);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
-  const [guestOpen, setGuestOpen] = useState(false);
-  const [guestName, setGuestName] = useState('');
+  // guest modal removed; keep no state
 
   function positionsForFormation(formation: string): { x:number; y:number }[] {
     const parts = formation.split('-').map((n)=>parseInt(n,10));
@@ -450,18 +449,7 @@ export default function TeamsPage() {
           </div>
         </div>
       </section>
-      {guestOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center" onClick={()=>setGuestOpen(false)}>
-          <div className="bg-white text-black rounded p-4 w-80" onClick={(e)=>e.stopPropagation()}>
-            <h3 className="font-medium mb-2">Add Guest Player</h3>
-            <input className="border rounded p-2 w-full mb-3" placeholder="Guest nickname" value={guestName} onChange={(e)=>setGuestName(e.target.value)} />
-            <div className="flex justify-end gap-2">
-              <button className="border px-3 py-1 rounded" onClick={()=>setGuestOpen(false)}>Cancel</button>
-              <button className="bg-green-600 text-white px-3 py-1 rounded disabled:opacity-50" disabled={!guestName.trim()} onClick={async()=>{ await addGuest(guestName.trim()); setGuestOpen(false); setGuestName(''); }}>Add</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* guest modal removed by requirement */}
       {busy && <p className="text-sm text-gray-500">Processing…</p>}
     </main>
   );
