@@ -408,11 +408,14 @@ export default function TeamsPage() {
                    e.stopPropagation();
                    showPlayerCard(part);
                  }}>
-              <div className="relative cursor-pointer">
+              <div className="relative cursor-pointer text-center">
                 {bubble(label, team.color)}
                 {!part.isGuest && (
                   <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
                 )}
+                <div className="text-[8px] text-white font-medium mt-1 max-w-[40px] truncate bg-black/50 rounded px-1">
+                  {label}
+                </div>
               </div>
             </div>
           );
@@ -451,65 +454,77 @@ export default function TeamsPage() {
       <p className="text-sm text-gray-500">Assign players via → buttons or use Auto-balance. Only the creator can change teams and positions.</p>
       {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        <div className="space-y-4">
-          <div className="border rounded p-3">
-            <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h2 className="font-medium">Team 1</h2>
-            <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#dc2626'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
-              if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#dc2626'; upsertTeam(1,{color:'#dc2626'}); } else { upsertTeam(1,{color:v}); } }} />
-          </div>
-          <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
-          <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
-            {optionsForSize(size1).map(o=> (
-              <option key={o.v} value={o.v}>{o.label}</option>
-            ))}
-          </select>
-          <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
-            </div>
-            <div className="space-y-2">
-              <h3 className="font-medium">Team 1 Roster</h3>
-              <ul className="space-y-1">
-                {asgnTeam1.map(a=> (
-                  <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                    <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
-          
-          <div className="border rounded p-3">
+      {/* Team 1 Section */}
+      <section className="space-y-4">
+        <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Team 1 Left: Settings */}
           <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h2 className="font-medium">Team 2</h2>
-            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#f59e0b'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#f59e0b'; upsertTeam(2,{color:'#f59e0b'}); } else { upsertTeam(2,{color:v}); } }} />
-          </div>
-          <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
-          <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
-            {optionsForSize(size2).map(o=> (
-              <option key={o.v} value={o.v}>{o.label}</option>
-            ))}
-          </select>
-          <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
+            <div className="flex items-center gap-2">
+              <h2 className="font-medium">Team 1</h2>
+              <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#dc2626'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
+                if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#dc2626'; upsertTeam(1,{color:'#dc2626'}); } else { upsertTeam(1,{color:v}); } }} />
             </div>
-            <div className="space-y-2">
-              <h3 className="font-medium">Team 2 Roster</h3>
-              <ul className="space-y-1">
-                {asgnTeam2.map(a=> (
-                  <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                    <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
+            <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
+              {optionsForSize(size1).map(o=> (
+                <option key={o.v} value={o.v}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
           </div>
-          <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
+          
+          {/* Team 1 Right: Roster */}
+          <div className="space-y-2">
+            <h3 className="font-medium">Team 1 Roster</h3>
+            <ul className="space-y-1">
+              {asgnTeam1.map(a=> (
+                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
+        
+        {/* Team 1 Field */}
+        <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
+      </section>
+
+      {/* Team 2 Section */}
+      <section className="space-y-4">
+        <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Team 2 Left: Settings */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="font-medium">Team 2</h2>
+              <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#f59e0b'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#f59e0b'; upsertTeam(2,{color:'#f59e0b'}); } else { upsertTeam(2,{color:v}); } }} />
+            </div>
+            <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
+            <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
+              {optionsForSize(size2).map(o=> (
+                <option key={o.v} value={o.v}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
+          </div>
+          
+          {/* Team 2 Right: Roster */}
+          <div className="space-y-2">
+            <h3 className="font-medium">Team 2 Roster</h3>
+            <ul className="space-y-1">
+              {asgnTeam2.map(a=> (
+                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        
+        {/* Team 2 Field */}
+        <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
