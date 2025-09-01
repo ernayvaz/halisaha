@@ -24,6 +24,8 @@ export default function TeamsPage() {
   const [posTeam2, setPosTeam2] = useState<Position[]>([]);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
+  const [guestOpen, setGuestOpen] = useState(false);
+  const [guestName, setGuestName] = useState('');
 
   function positionsForFormation(formation: string): { x:number; y:number }[] {
     const parts = formation.split('-').map((n)=>parseInt(n,10));
@@ -364,13 +366,6 @@ export default function TeamsPage() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
         <div className="border rounded p-3 space-y-3">
-          <div className="border rounded p-3 space-y-2 bg-black/10">
-            <h3 className="font-medium text-sm">Guest Player</h3>
-            <div className="flex items-end gap-2">
-              <input id="guestNameTeams" className="border rounded p-2 w-full" placeholder="Guest Player name" />
-              <button onClick={()=>{ const el=document.getElementById('guestNameTeams') as HTMLInputElement; const v=el?.value?.trim(); if (v) addGuest(v); if (el) el.value=''; }} className="border px-3 py-2 rounded">Add Guest Player</button>
-            </div>
-          </div>
           <h2 className="font-medium">Team 1</h2>
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
           <div className="flex items-center gap-2">
@@ -404,7 +399,10 @@ export default function TeamsPage() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="border rounded p-3">
-          <h3 className="font-medium mb-2">Players</h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-medium">Players</h3>
+            <button onClick={()=>{ setGuestOpen(true); setGuestName(''); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
+          </div>
           <ul className="divide-y">
             {participants.map((p)=> (
               <li key={p.id} className="py-2 flex justify-between items-center">
@@ -422,17 +420,31 @@ export default function TeamsPage() {
             ))}
           </ul>
         </div>
-        <div className="border rounded p-3 space-y-2">
-          <h3 className="font-medium">Auto-balance</h3>
-          <AutoBalanceSingle eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
+        <div className="border rounded p-3">
+          <div className="flex items-center justify-end gap-2">
+            <TeamBalance eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
+            <button onClick={async()=>{ if (!eventData) return; await fetch(`/api/events/${eventData.id}/snapshot`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ note: 'manual-save' }) }); alert('Saved'); }} className="border px-3 py-2 rounded">Save</button>
+          </div>
         </div>
       </section>
+      {guestOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center" onClick={()=>setGuestOpen(false)}>
+          <div className="bg-white text-black rounded p-4 w-80" onClick={(e)=>e.stopPropagation()}>
+            <h3 className="font-medium mb-2">Add Guest Player</h3>
+            <input className="border rounded p-2 w-full mb-3" placeholder="Guest nickname" value={guestName} onChange={(e)=>setGuestName(e.target.value)} />
+            <div className="flex justify-end gap-2">
+              <button className="border px-3 py-1 rounded" onClick={()=>setGuestOpen(false)}>Cancel</button>
+              <button className="bg-green-600 text-white px-3 py-1 rounded disabled:opacity-50" disabled={!guestName.trim()} onClick={async()=>{ await addGuest(guestName.trim()); setGuestOpen(false); setGuestName(''); }}>Add</button>
+            </div>
+          </div>
+        </div>
+      )}
       {busy && <p className="text-sm text-gray-500">Processing…</p>}
     </main>
   );
 }
 
-function AutoBalanceSingle({ eventId, rosterLocked, isOwner }: { eventId: string; rosterLocked: boolean; isOwner: boolean }) {
+function TeamBalance({ eventId, rosterLocked, isOwner }: { eventId: string; rosterLocked: boolean; isOwner: boolean }) {
   const [preview, setPreview] = useState<{ scoreA: number; scoreB: number } | null>(null);
   const run = async () => {
     const r = await fetch(`/api/events/${eventId}/autobalance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'greedy', apply: true }) });
@@ -441,7 +453,7 @@ function AutoBalanceSingle({ eventId, rosterLocked, isOwner }: { eventId: string
   };
   return (
     <div className="space-y-2">
-      <button onClick={run} disabled={rosterLocked || !isOwner} className="bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded">Auto-Balance</button>
+      <button onClick={run} disabled={rosterLocked || !isOwner} className="bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded">Team-Balance</button>
       {rosterLocked && <p className="text-xs text-gray-500">Roster is locked. Auto-balance is disabled.</p>}
       {preview && <p className="text-sm text-gray-600">Balanced • Score A: {preview.scoreA} • Score B: {preview.scoreB}</p>}
     </div>
