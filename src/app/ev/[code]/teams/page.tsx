@@ -441,64 +441,172 @@ export default function TeamsPage() {
       <p className="text-sm text-gray-500">Assign players via → buttons or use Auto-balance. Only the creator can change teams and positions.</p>
       {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-        <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Team 1 Controls */}
+        <div className="border rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Team 1</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Players: {size1}</span>
+            </div>
+          </div>
+          
           <div className="space-y-3">
-          <h2 className="font-medium">Team 1</h2>
-          <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#16a34a'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
-              if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#2563eb'; upsertTeam(1,{color:'#2563eb'}); } else { upsertTeam(1,{color:v}); } }} />
+            <input 
+              disabled={!isOwner} 
+              className="border rounded p-2 w-full disabled:opacity-50 font-medium" 
+              placeholder="Team name" 
+              defaultValue={team1?.name||''} 
+              onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} 
+            />
+            
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium">Color:</label>
+              <input 
+                disabled={!isOwner} 
+                type="color" 
+                defaultValue={team1?.color||'#dc2626'} 
+                onChange={(e)=>{ 
+                  const v=e.target.value.toLowerCase(); 
+                  if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { 
+                    e.target.value = '#dc2626'; 
+                    upsertTeam(1,{color:'#dc2626'}); 
+                  } else { 
+                    upsertTeam(1,{color:v}); 
+                  } 
+                }} 
+                className="w-12 h-8 rounded border cursor-pointer disabled:cursor-not-allowed"
+              />
+            </div>
+            
+            <select 
+              disabled={!isOwner} 
+              className="border rounded p-2 w-full disabled:opacity-50" 
+              value={team1?.formation||'1-2-2-1'} 
+              onChange={(e)=>upsertTeam(1,{formation:e.target.value})}
+            >
+              {optionsForSize(size1).map(o=> (
+                <option key={o.v} value={o.v}>{o.label}</option>
+              ))}
+            </select>
           </div>
-          <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
-            {optionsForSize(size1).map(o=> (
-              <option key={o.v} value={o.v}>{o.label}</option>
-            ))}
-          </select>
-          <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
-          </div>
+
           <div className="space-y-2">
-            <h3 className="font-medium">Team 1 Roster</h3>
-            <ul className="divide-y">
+            <h3 className="font-medium text-sm">Team 1 Roster</h3>
+            <ul className="space-y-1">
               {asgnTeam1.map(a=> (
-                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                <li key={a.id} className="py-2 px-3 bg-gray-50 rounded text-sm flex justify-between items-center">
+                  <span className="cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(a.participant)}>
+                    {a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}
+                  </span>
+                  <button 
+                    className="text-xs border rounded px-2 py-1 text-red-600 hover:bg-red-50" 
+                    onClick={async()=>{ 
+                      await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); 
+                      const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); 
+                      setParticipants(plist); 
+                      await refreshTeamData(eventData!.id, teams); 
+                    }}
+                  >
+                    Remove
+                  </button>
                 </li>
               ))}
+              {asgnTeam1.length === 0 && (
+                <li className="py-3 text-center text-gray-400 text-sm">No players assigned</li>
+              )}
             </ul>
           </div>
         </div>
-        <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
-        <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+
+        {/* Team 1 Field */}
+        <div className="border rounded-lg p-4">
+          <h3 className="font-medium text-sm mb-3">Team 1 Formation</h3>
+          <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
+        </div>
+
+        {/* Team 2 Controls */}
+        <div className="border rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Team 2</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Players: {size2}</span>
+            </div>
+          </div>
+          
           <div className="space-y-3">
-          <h2 className="font-medium">Team 2</h2>
-          <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#16a34a'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#db2777'; upsertTeam(2,{color:'#db2777'}); } else { upsertTeam(2,{color:v}); } }} />
+            <input 
+              disabled={!isOwner} 
+              className="border rounded p-2 w-full disabled:opacity-50 font-medium" 
+              placeholder="Team name" 
+              defaultValue={team2?.name||''} 
+              onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} 
+            />
+            
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium">Color:</label>
+              <input 
+                disabled={!isOwner} 
+                type="color" 
+                defaultValue={team2?.color||'#f59e0b'} 
+                onChange={(e)=>{ 
+                  const v=e.target.value.toLowerCase(); 
+                  if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { 
+                    e.target.value = '#f59e0b'; 
+                    upsertTeam(2,{color:'#f59e0b'}); 
+                  } else { 
+                    upsertTeam(2,{color:v}); 
+                  } 
+                }} 
+                className="w-12 h-8 rounded border cursor-pointer disabled:cursor-not-allowed"
+              />
+            </div>
+            
+            <select 
+              disabled={!isOwner} 
+              className="border rounded p-2 w-full disabled:opacity-50" 
+              value={team2?.formation||'1-2-2-1'} 
+              onChange={(e)=>upsertTeam(2,{formation:e.target.value})}
+            >
+              {optionsForSize(size2).map(o=> (
+                <option key={o.v} value={o.v}>{o.label}</option>
+              ))}
+            </select>
           </div>
-          <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
-            {optionsForSize(size2).map(o=> (
-              <option key={o.v} value={o.v}>{o.label}</option>
-            ))}
-          </select>
-          <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
-          </div>
+
           <div className="space-y-2">
-            <h3 className="font-medium">Team 2 Roster</h3>
-            <ul className="divide-y">
+            <h3 className="font-medium text-sm">Team 2 Roster</h3>
+            <ul className="space-y-1">
               {asgnTeam2.map(a=> (
-                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                <li key={a.id} className="py-2 px-3 bg-gray-50 rounded text-sm flex justify-between items-center">
+                  <span className="cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(a.participant)}>
+                    {a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}
+                  </span>
+                  <button 
+                    className="text-xs border rounded px-2 py-1 text-red-600 hover:bg-red-50" 
+                    onClick={async()=>{ 
+                      await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); 
+                      const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); 
+                      setParticipants(plist); 
+                      await refreshTeamData(eventData!.id, teams); 
+                    }}
+                  >
+                    Remove
+                  </button>
                 </li>
               ))}
+              {asgnTeam2.length === 0 && (
+                <li className="py-3 text-center text-gray-400 text-sm">No players assigned</li>
+              )}
             </ul>
           </div>
         </div>
-        <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
+
+        {/* Team 2 Field */}
+        <div className="border rounded-lg p-4">
+          <h3 className="font-medium text-sm mb-3">Team 2 Formation</h3>
+          <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
+        </div>
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -507,9 +615,9 @@ export default function TeamsPage() {
             <h3 className="font-medium">Players</h3>
             <button onClick={async()=>{ if (!eventData) return; const count = participants.filter(p=>p.isGuest).length + 1; const defaultName = `Guest ${count}`; await addGuest(defaultName); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
           </div>
-          <ul className="divide-y">
+          <ul className="space-y-2">
             {participants.map((p)=> (
-              <li key={p.id} className="py-2 flex justify-between items-center">
+              <li key={p.id} className="py-3 px-3 bg-gray-50 rounded flex justify-between items-center">
                 <span className="flex items-center gap-1">
                   <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center cursor-pointer" 
                        title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}
@@ -524,9 +632,42 @@ export default function TeamsPage() {
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
-                  {(() => { const c = team1?.color || '#16a34a'; const selected = asgnTeam1.some(a=>a.participantId===p.id); const bg = selected ? '#166534' : c; return <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: bg, color: textColorFor(bg) }}>→ 1</button>; })()}
-                  {(() => { const c = team2?.color || '#16a34a'; const selected = asgnTeam2.some(a=>a.participantId===p.id); const bg = selected ? '#166534' : c; return <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: bg, color: textColorFor(bg) }}>→ 2</button>; })()}
-                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
+                  {(() => { 
+                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                    const c1 = team1?.color || '#dc2626'; 
+                    const c2 = team2?.color || '#f59e0b';
+                    
+                    return (
+                      <>
+                        <button 
+                          onClick={()=>assign(1,p.id)} 
+                          className={`text-xs border rounded px-2 py-1 ${inTeam1 ? 'ring-2 ring-white' : ''}`}
+                          style={{ 
+                            backgroundColor: inTeam1 ? c1 : (inTeam2 ? '#6b7280' : c1), 
+                            color: textColorFor(inTeam1 ? c1 : (inTeam2 ? '#6b7280' : c1)),
+                            opacity: inTeam2 ? 0.5 : 1
+                          }}
+                          disabled={inTeam2}
+                        >
+                          Team 1
+                        </button>
+                        <button 
+                          onClick={()=>assign(2,p.id)} 
+                          className={`text-xs border rounded px-2 py-1 ${inTeam2 ? 'ring-2 ring-white' : ''}`}
+                          style={{ 
+                            backgroundColor: inTeam2 ? c2 : (inTeam1 ? '#6b7280' : c2), 
+                            color: textColorFor(inTeam2 ? c2 : (inTeam1 ? '#6b7280' : c2)),
+                            opacity: inTeam1 ? 0.5 : 1
+                          }}
+                          disabled={inTeam1}
+                        >
+                          Team 2
+                        </button>
+                      </>
+                    );
+                  })()}
+                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1 text-red-600 hover:bg-red-50">Remove</button>
                 </div>
               </li>
             ))}
@@ -540,66 +681,142 @@ export default function TeamsPage() {
         </div>
       </section>
       
-      {/* Player Card Modal */}
+      {/* Modern Player Card Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Player Card</h3>
-              <button onClick={() => setSelectedPlayer(null)} className="text-gray-500 hover:text-gray-700">✕</button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="relative bg-gradient-to-br from-blue-600 to-purple-700 px-6 py-8 text-white">
+              <button 
+                onClick={() => setSelectedPlayer(null)} 
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              
+              <div className="text-center">
+                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm text-white text-3xl font-bold flex items-center justify-center mx-auto mb-3 ring-4 ring-white/30">
+                  {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
+                </div>
+                <h4 className="text-xl font-bold mb-1">
+                  {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
+                </h4>
+                {(selectedPlayer as any).role === 'owner' && (
+                  <div className="inline-flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-medium">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd" />
+                    </svg>
+                    Owner
+                  </div>
+                )}
+              </div>
             </div>
-            
-            <div className="text-center mb-4">
-              <div className="w-16 h-16 rounded-full bg-green-600 text-white text-2xl flex items-center justify-center mx-auto mb-2">
-                {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
-              </div>
-              <h4 className="font-medium text-lg">
-                {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
-              </h4>
-              {(selectedPlayer as any).role === 'owner' && <span className="text-xs text-gray-500">(Owner)</span>}
+
+            {/* Content */}
+            <div className="p-6">
+              {selectedPlayer.isGuest ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-500 text-sm">Guest player - no stats available</p>
+                </div>
+              ) : playerCard ? (
+                <div className="space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-blue-50 rounded-xl p-4 text-center">
+                      <div className="text-blue-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-blue-600 mb-1">{playerCard.pace || '-'}</div>
+                      <div className="text-xs font-medium text-blue-700">PACE</div>
+                    </div>
+                    
+                    <div className="bg-red-50 rounded-xl p-4 text-center">
+                      <div className="text-red-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-red-600 mb-1">{playerCard.shoot || '-'}</div>
+                      <div className="text-xs font-medium text-red-700">SHOOT</div>
+                    </div>
+                    
+                    <div className="bg-green-50 rounded-xl p-4 text-center">
+                      <div className="text-green-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-green-600 mb-1">{playerCard.pass || '-'}</div>
+                      <div className="text-xs font-medium text-green-700">PASS</div>
+                    </div>
+                    
+                    <div className="bg-purple-50 rounded-xl p-4 text-center">
+                      <div className="text-purple-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-purple-600 mb-1">{playerCard.defend || '-'}</div>
+                      <div className="text-xs font-medium text-purple-700">DEFEND</div>
+                    </div>
+                  </div>
+
+                  {/* Preferred Foot */}
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <div className="text-gray-600 mb-2">
+                      <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4 4 4 0 004-4V5z" />
+                      </svg>
+                    </div>
+                    <div className="text-lg font-semibold text-gray-800 mb-1">
+                      {playerCard.foot === 'L' ? 'Left Foot' : playerCard.foot === 'R' ? 'Right Foot' : 'Not specified'}
+                    </div>
+                    <div className="text-xs font-medium text-gray-600">PREFERRED FOOT</div>
+                  </div>
+
+                  {/* Overall Rating */}
+                  <div className="text-center">
+                    <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-full">
+                      <span className="text-sm font-medium">Overall Rating:</span>
+                      <span className="text-lg font-bold">
+                        {Math.round(((playerCard.pace || 0) + (playerCard.shoot || 0) + (playerCard.pass || 0) + (playerCard.defend || 0)) / 4 * 10) / 10}
+                      </span>
+                      <span className="text-sm">/5</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-500">Loading player stats...</p>
+                </div>
+              )}
+              
+              {/* Badges */}
+              {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-gray-100">
+                  <div className="text-center">
+                    <h5 className="text-sm font-semibold text-gray-700 mb-3">Achievements</h5>
+                    <div className="flex justify-center gap-2 flex-wrap">
+                      {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
+                        <div key={i} className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                          🏅 MVP Level {badge.level}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            
-            {selectedPlayer.isGuest ? (
-              <p className="text-center text-gray-500 text-sm">Guest player - no stats available</p>
-            ) : playerCard ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center">
-                  <div className="text-sm text-gray-500">Pace</div>
-                  <div className="text-2xl font-bold text-blue-600">{playerCard.pace || '-'}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-gray-500">Shoot</div>
-                  <div className="text-2xl font-bold text-red-600">{playerCard.shoot || '-'}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-gray-500">Pass</div>
-                  <div className="text-2xl font-bold text-green-600">{playerCard.pass || '-'}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-gray-500">Defend</div>
-                  <div className="text-2xl font-bold text-purple-600">{playerCard.defend || '-'}</div>
-                </div>
-                <div className="col-span-2 text-center">
-                  <div className="text-sm text-gray-500">Preferred Foot</div>
-                  <div className="text-lg font-medium">{playerCard.foot === 'L' ? 'Left' : playerCard.foot === 'R' ? 'Right' : '-'}</div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center text-gray-500">Loading player stats...</div>
-            )}
-            
-            {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
-              <div className="mt-4 text-center">
-                <div className="text-sm text-gray-500 mb-1">Badges</div>
-                <div className="flex justify-center gap-1">
-                  {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
-                    <span key={i} className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                      🏅 MVP Lv{badge.level}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

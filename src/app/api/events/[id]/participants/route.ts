@@ -3,9 +3,10 @@ import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rateLimit';
 import { publish } from '@/lib/realtime';
 
-function pickNonGreenColor() {
-  const palette = ['#2563eb', '#db2777', '#f59e0b', '#7c3aed', '#0ea5a8', '#ef4444', '#eab308', '#14b8a6'];
-  return palette[Math.floor(Math.random()*palette.length)];
+function getTeamColor(index: number) {
+  // Default colors: dark red and sunset yellow
+  const colors = ['#dc2626', '#f59e0b']; // dark red, sunset yellow
+  return colors[(index - 1) % colors.length];
 }
 
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -69,8 +70,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   // Auto-assign: create teams if missing, then put participant into the team with fewer members (tie -> random)
   const [team1, team2] = await Promise.all([
-    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Team 1', color: pickNonGreenColor() } }),
-    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Team 2', color: pickNonGreenColor() } })
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Team 1', color: getTeamColor(1) } }),
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Team 2', color: getTeamColor(2) } })
   ]);
   const [c1, c2] = await Promise.all([
     prisma.assignment.count({ where: { teamId: team1.id } }),

@@ -214,52 +214,118 @@ export default function LineupPage() {
         <div className="mt-2 text-[10px] text-gray-500 text-right">{new Date().toLocaleString()}</div>
       </div>
       
-      {/* Player Card Modal */}
+      {/* Modern Player Card Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Player Card</h3>
-              <button onClick={() => setSelectedPlayer(null)} className="text-gray-500 hover:text-gray-700">✕</button>
-            </div>
-            
-            <div className="text-center mb-4">
-              <div className="w-16 h-16 rounded-full bg-green-600 text-white text-2xl flex items-center justify-center mx-auto mb-2">
-                {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="relative bg-gradient-to-br from-blue-600 to-purple-700 px-6 py-8 text-white">
+              <button 
+                onClick={() => setSelectedPlayer(null)} 
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              
+              <div className="text-center">
+                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm text-white text-3xl font-bold flex items-center justify-center mx-auto mb-3 ring-4 ring-white/30">
+                  {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
+                </div>
+                <h4 className="text-xl font-bold mb-1">
+                  {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
+                </h4>
               </div>
-              <h4 className="font-medium text-lg">
-                {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
-              </h4>
             </div>
-            
-            {selectedPlayer.isGuest ? (
-              <p className="text-center text-gray-500 text-sm">Guest player - no stats available</p>
-            ) : playerCard ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center">
-                  <div className="text-sm text-gray-500">Pace</div>
-                  <div className="text-2xl font-bold text-blue-600">{playerCard.pace || '-'}</div>
+
+            {/* Content */}
+            <div className="p-6">
+              {selectedPlayer.isGuest ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-500 text-sm">Guest player - no stats available</p>
                 </div>
-                <div className="text-center">
-                  <div className="text-sm text-gray-500">Shoot</div>
-                  <div className="text-2xl font-bold text-red-600">{playerCard.shoot || '-'}</div>
+              ) : playerCard ? (
+                <div className="space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-blue-50 rounded-xl p-4 text-center">
+                      <div className="text-blue-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-blue-600 mb-1">{playerCard.pace || '-'}</div>
+                      <div className="text-xs font-medium text-blue-700">PACE</div>
+                    </div>
+                    
+                    <div className="bg-red-50 rounded-xl p-4 text-center">
+                      <div className="text-red-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-red-600 mb-1">{playerCard.shoot || '-'}</div>
+                      <div className="text-xs font-medium text-red-700">SHOOT</div>
+                    </div>
+                    
+                    <div className="bg-green-50 rounded-xl p-4 text-center">
+                      <div className="text-green-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-green-600 mb-1">{playerCard.pass || '-'}</div>
+                      <div className="text-xs font-medium text-green-700">PASS</div>
+                    </div>
+                    
+                    <div className="bg-purple-50 rounded-xl p-4 text-center">
+                      <div className="text-purple-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-purple-600 mb-1">{playerCard.defend || '-'}</div>
+                      <div className="text-xs font-medium text-purple-700">DEFEND</div>
+                    </div>
+                  </div>
+
+                  {/* Preferred Foot */}
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <div className="text-gray-600 mb-2">
+                      <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4 4 4 0 004-4V5z" />
+                      </svg>
+                    </div>
+                    <div className="text-lg font-semibold text-gray-800 mb-1">
+                      {playerCard.foot === 'L' ? 'Left Foot' : playerCard.foot === 'R' ? 'Right Foot' : 'Not specified'}
+                    </div>
+                    <div className="text-xs font-medium text-gray-600">PREFERRED FOOT</div>
+                  </div>
+
+                  {/* Overall Rating */}
+                  <div className="text-center">
+                    <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-full">
+                      <span className="text-sm font-medium">Overall Rating:</span>
+                      <span className="text-lg font-bold">
+                        {Math.round(((playerCard.pace || 0) + (playerCard.shoot || 0) + (playerCard.pass || 0) + (playerCard.defend || 0)) / 4 * 10) / 10}
+                      </span>
+                      <span className="text-sm">/5</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <div className="text-sm text-gray-500">Pass</div>
-                  <div className="text-2xl font-bold text-green-600">{playerCard.pass || '-'}</div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-500">Loading player stats...</p>
                 </div>
-                <div className="text-center">
-                  <div className="text-sm text-gray-500">Defend</div>
-                  <div className="text-2xl font-bold text-purple-600">{playerCard.defend || '-'}</div>
-                </div>
-                <div className="col-span-2 text-center">
-                  <div className="text-sm text-gray-500">Preferred Foot</div>
-                  <div className="text-lg font-medium">{playerCard.foot === 'L' ? 'Left' : playerCard.foot === 'R' ? 'Right' : '-'}</div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center text-gray-500">Loading player stats...</div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
