@@ -176,22 +176,21 @@ export default function TeamsPage() {
     if (!eventData || !isOwner || busy) return;
     setBusy(true);
     
-          // Optimistic update
-      const currentTeam = team(index);
-      const defaultColors = { 1: '#dc2626', 2: '#f59e0b' }; // dark red, sunset yellow
-      const updatedTeam = { 
-        ...currentTeam, 
-        name: partial.name ?? currentTeam?.name ?? `Team ${index}`, 
-        color: partial.color ?? currentTeam?.color ?? defaultColors[index],
-        formation: partial.formation ?? currentTeam?.formation ?? '1-2-2-1'
-      };
+    // Optimistic update
+    const currentTeam = team(index);
+    const updatedTeam = { 
+      ...currentTeam, 
+      name: partial.name ?? currentTeam?.name ?? `Team ${index}`, 
+      color: partial.color ?? currentTeam?.color ?? '#16a34a',
+      formation: partial.formation ?? currentTeam?.formation ?? '1-2-2-1'
+    };
     const other = teams.filter(x=>x.index!==index);
     setTeams([...other, updatedTeam as Team].sort((a,b)=>a.index-b.index));
     
     try {
-    const body = { index, name: partial.name ?? team(index)?.name ?? `Team ${index}`, color: partial.color ?? team(index)?.color, formation: partial.formation ?? team(index)?.formation };
-    const r = await fetch(`/api/events/${eventData.id}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const t = await r.json();
+      const body = { index, name: partial.name ?? team(index)?.name ?? `Team ${index}`, color: partial.color ?? team(index)?.color, formation: partial.formation ?? team(index)?.formation };
+      const r = await fetch(`/api/events/${eventData.id}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const t = await r.json();
       const finalOther = teams.filter(x=>x.index!==index);
       setTeams([...finalOther, t].sort((a,b)=>a.index-b.index));
     } catch (error) {
@@ -208,35 +207,40 @@ export default function TeamsPage() {
     if (!t) return;
     
     // Check if player is already in the selected team
-      const from1 = asgnTeam1.find(a=>a.participantId===participantId);
-      const from2 = asgnTeam2.find(a=>a.participantId===participantId);
-      const participant = participants.find(p=>p.id===participantId);
-      if (!participant) return;
+    const from1 = asgnTeam1.find(a=>a.participantId===participantId);
+    const from2 = asgnTeam2.find(a=>a.participantId===participantId);
+    const participant = participants.find(p=>p.id===participantId);
+    if (!participant) return;
     
     // If player is already in the selected team, do nothing
     if ((idx === 1 && from1) || (idx === 2 && from2)) return;
     
-      const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
+    const mkAssignment = (teamId: string): Assignment => ({ 
+      id: `local-${participantId}-${teamId}`, 
+      teamId, 
+      participantId, 
+      participant 
+    });
     
-    // Remove from other team and add to selected team
+    // Optimistic update for immediate UI response
     if (idx === 1) {
       setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
       if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
-      } else {
+    } else {
       setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
       if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
-      }
+    }
     
     // Update counts immediately
-      const t1 = team1; const t2 = team2;
-      if (t1 && t2) {
+    const t1 = team1; const t2 = team2;
+    if (t1 && t2) {
       const c1 = idx === 1 ? asgnTeam1.length + 1 - (from1 ? 0 : 0) - (from2 ? 1 : 0) : asgnTeam1.length - (from1 ? 1 : 0);
       const c2 = idx === 2 ? asgnTeam2.length + 1 - (from2 ? 0 : 0) - (from1 ? 1 : 0) : asgnTeam2.length - (from2 ? 1 : 0);
       setAssignmentsByTeam({ ...(assignmentsByTeam||{}), [t1.id]: Math.max(0, c1), [t2.id]: Math.max(0, c2) });
     }
 
+    // Only make API call if owner, no automatic refresh
     if (isOwner) {
-      // Background API call - first remove from other team, then add to selected team
       try {
         if (from1 || from2) {
           const otherTeamId = from1 ? team1?.id : team2?.id;
@@ -244,10 +248,14 @@ export default function TeamsPage() {
             await fetch(`/api/teams/${otherTeamId}/assignments?participantId=${participantId}`, { method: 'DELETE' });
           }
         }
-        await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
+        await fetch(`/api/teams/${t.id}/assignments`, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({ participantId }) 
+        });
       } catch (error) {
-        // Revert on error
         console.error('Assignment failed:', error);
+        // Revert optimistic update on error
         await refreshTeamData(eventData!.id, teams);
       }
     }
@@ -345,20 +353,23 @@ export default function TeamsPage() {
   const HalfField = ({ team, asgn, pos, setPos }: { team?: Team; asgn: Assignment[]; pos: Position[]; setPos: Dispatch<SetStateAction<Position[]>> }) => {
     const fieldRef = useRef<HTMLDivElement | null>(null);
     const draggingRef = useRef<{ id: string } | null>(null);
-    if (!team) return null;
+    
+    // Always render field, even if no team data yet
     const labelFor = (pid: string) => {
       const a = asgn.find(x=>x.participantId===pid);
       const label = a?.participant.isGuest ? (a?.participant.guestName||'Guest') : (a?.participant.user?.displayName || a?.participant.user?.handle || 'Player');
       return label;
     };
+    
     const tokenPos = (idx: number, pid: string) => {
       const p = pos.find(x=>x.participantId===pid);
       if (p) return { x: p.x, y: p.y };
-      const preset = positionsForFormation(team.formation);
+      const preset = team ? positionsForFormation(team.formation) : positionsForFormation('1-2-2-1');
       if (idx < preset.length) return preset[idx];
       const k = idx - preset.length; const row = k % 4; const col = Math.floor(k/4);
       return { x: Math.min(0.95, 0.65 + col*0.1), y: 0.2 + row*0.2 };
     };
+    
     const clamp = (v:number,min:number,max:number)=>Math.min(Math.max(v,min),max);
     const onPointerDown = (e: React.PointerEvent<HTMLDivElement>, pid: string) => {
       if (!fieldRef.current) return;
@@ -366,6 +377,7 @@ export default function TeamsPage() {
       draggingRef.current = { id: pid };
       try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
     };
+    
     const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       if (!fieldRef.current || !draggingRef.current) return;
       const rect = fieldRef.current.getBoundingClientRect();
@@ -375,9 +387,10 @@ export default function TeamsPage() {
       setPos(prev=>{
         const idx = prev.findIndex(p=>p.participantId===id);
         if (idx>=0){ const copy=[...prev]; copy[idx] = { ...copy[idx], x, y }; return copy; }
-        return [...prev, { id: `tmp-${id}`, teamId: team.id, participantId: id, x, y }];
+        return [...prev, { id: `tmp-${id}`, teamId: team?.id || 'temp', participantId: id, x, y }];
       });
     };
+    
     const onPointerUp = async () => {
       if (!draggingRef.current || !team) return;
       const id = draggingRef.current.id; draggingRef.current = null;
@@ -401,6 +414,7 @@ export default function TeamsPage() {
           const posi = tokenPos(i, a.participantId);
           const label = labelFor(a.participantId);
           const part = a.participant;
+          const teamColor = team?.color || '#86efac';
           return (
             <div key={a.id} className="absolute" style={{ left: `${posi.x*100}%`, top: `${posi.y*100}%`, transform:'translate(-50%,-50%)' }} 
                  onPointerDown={(e)=>onPointerDown(e, a.participantId)}
@@ -410,7 +424,7 @@ export default function TeamsPage() {
                  }}>
               <div className="relative cursor-pointer flex flex-col items-center">
                 <div className="relative">
-                  {bubble(label, team.color)}
+                  {bubble(label, teamColor)}
                   {!part.isGuest && (
                     <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
                   )}
@@ -428,17 +442,34 @@ export default function TeamsPage() {
 
   const addGuest = async (name: string) => {
     if (!eventData || !name) return;
+    
+    // Optimistic update for immediate UI response
+    const newGuest: Participant = {
+      id: `temp-${Date.now()}`,
+      isGuest: true,
+      guestName: name,
+    };
+    setParticipants(prev => [...prev, newGuest]);
+    
     try {
-      const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
+      const r = await fetch(`/api/events/${eventData.id}/participants`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ mode: 'join', guestName: name }) 
+      });
       if (!r.ok) throw new Error('guest add failed');
-    } finally {
-      // Always refresh lists to reflect latest state
+      
+      // Refresh with real data
       const [plist, tlist] = await Promise.all([
         fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()),
         fetch(`/api/events/${eventData.id}/teams`).then(r=>r.json()),
       ]);
       setParticipants(plist);
       await refreshTeamData(eventData.id, tlist);
+    } catch (error) {
+      console.error('Failed to add guest:', error);
+      // Revert optimistic update on error
+      setParticipants(prev => prev.filter(p => p.id !== newGuest.id));
     }
   };
 
@@ -456,10 +487,10 @@ export default function TeamsPage() {
       <p className="text-sm text-gray-500">Assign players via → buttons or use Auto-balance. Only the creator can change teams and positions.</p>
       {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
-            {/* Teams Layout: Team1 Box + Field, Team2 Field + Box */}
-      <section className="space-y-6">
-        {/* Top Row: Team 1 Box + Team 1 Field */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      {/* Teams Layout: Team Boxes Left, Fields Right */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column: Team Boxes Stacked */}
+        <div className="space-y-6">
           {/* Team 1 Box */}
           <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Team 1 Left: Settings */}
@@ -491,16 +522,7 @@ export default function TeamsPage() {
               </ul>
             </div>
           </div>
-          
-          {/* Team 1 Field */}
-          <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
-        </div>
 
-        {/* Bottom Row: Team 2 Field + Team 2 Box */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          {/* Team 2 Field */}
-          <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
-          
           {/* Team 2 Box */}
           <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Team 2 Left: Settings */}
@@ -532,6 +554,15 @@ export default function TeamsPage() {
             </div>
           </div>
         </div>
+
+        {/* Right Column: Fields Stacked */}
+        <div className="space-y-6">
+          {/* Team 1 Field */}
+          <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
+          
+          {/* Team 2 Field */}
+          <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
+        </div>
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -540,7 +571,7 @@ export default function TeamsPage() {
             <h3 className="font-medium">Players</h3>
             <button onClick={async()=>{ if (!eventData) return; const count = participants.filter(p=>p.isGuest).length + 1; const defaultName = `Guest ${count}`; await addGuest(defaultName); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
           </div>
-          <ul className="space-y-2">
+          <ul className="divide-y">
             {participants.map((p)=> (
               <li key={p.id} className="py-2 flex justify-between items-center">
                 <span className="flex items-center gap-1">
@@ -556,37 +587,11 @@ export default function TeamsPage() {
                   )}
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
-                                <div className="flex gap-2">
-                    {(() => { 
-                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = team1?.color || '#dc2626'; 
-                      const teamName = team1?.name || 'Team 1';
-                      return <button 
-                        onClick={()=>assign(1,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam2 ? 0.5 : 1 }}
-                        disabled={inTeam1}
-                      >
-                        {teamName}
-                      </button>; 
-                    })()}
-                    {(() => { 
-                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = team2?.color || '#f59e0b'; 
-                      const teamName = team2?.name || 'Team 2';
-                      return <button 
-                        onClick={()=>assign(2,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam1 ? 0.5 : 1 }}
-                        disabled={inTeam2}
-                      >
-                        {teamName}
-                      </button>; 
-                    })()}
-                    <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
-                  </div>
+                <div className="flex gap-2">
+                  {(() => { const c = team1?.color || '#16a34a'; const selected = asgnTeam1.some(a=>a.participantId===p.id); const bg = selected ? '#166534' : c; return <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: bg, color: textColorFor(bg) }}>→ 1</button>; })()}
+                  {(() => { const c = team2?.color || '#16a34a'; const selected = asgnTeam2.some(a=>a.participantId===p.id); const bg = selected ? '#166534' : c; return <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: bg, color: textColorFor(bg) }}>→ 2</button>; })()}
+                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
+                </div>
               </li>
             ))}
           </ul>
@@ -599,142 +604,66 @@ export default function TeamsPage() {
         </div>
       </section>
       
-      {/* Modern Player Card Modal */}
+      {/* Player Card Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="relative bg-gradient-to-br from-blue-600 to-purple-700 px-6 py-8 text-white">
-              <button 
-                onClick={() => setSelectedPlayer(null)} 
-                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              
-              <div className="text-center">
-                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm text-white text-3xl font-bold flex items-center justify-center mx-auto mb-3 ring-4 ring-white/30">
-                  {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
-                </div>
-                <h4 className="text-xl font-bold mb-1">
-                  {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
-                </h4>
-                {(selectedPlayer as any).role === 'owner' && (
-                  <div className="inline-flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-medium">
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd" />
-                    </svg>
-                    Owner
-                  </div>
-                )}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Player Card</h3>
+              <button onClick={() => setSelectedPlayer(null)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-green-600 text-white text-2xl flex items-center justify-center mx-auto mb-2">
+                {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
               </div>
+              <h4 className="font-medium text-lg">
+                {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
+              </h4>
+              {(selectedPlayer as any).role === 'owner' && <span className="text-xs text-gray-500">(Owner)</span>}
             </div>
-
-            {/* Content */}
-            <div className="p-6">
-              {selectedPlayer.isGuest ? (
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-500 text-sm">Guest player - no stats available</p>
+            
+            {selectedPlayer.isGuest ? (
+              <p className="text-center text-gray-500 text-sm">Guest player - no stats available</p>
+            ) : playerCard ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Pace</div>
+                  <div className="text-2xl font-bold text-blue-600">{playerCard.pace || '-'}</div>
                 </div>
-              ) : playerCard ? (
-                <div className="space-y-6">
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-blue-50 rounded-xl p-4 text-center">
-                      <div className="text-blue-600 mb-2">
-                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                      </div>
-                      <div className="text-2xl font-bold text-blue-600 mb-1">{playerCard.pace || '-'}</div>
-                      <div className="text-xs font-medium text-blue-700">PACE</div>
-                    </div>
-                    
-                    <div className="bg-red-50 rounded-xl p-4 text-center">
-                      <div className="text-red-600 mb-2">
-                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                        </svg>
-                      </div>
-                      <div className="text-2xl font-bold text-red-600 mb-1">{playerCard.shoot || '-'}</div>
-                      <div className="text-xs font-medium text-red-700">SHOOT</div>
-                    </div>
-                    
-                    <div className="bg-green-50 rounded-xl p-4 text-center">
-                      <div className="text-green-600 mb-2">
-                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                      </div>
-                      <div className="text-2xl font-bold text-green-600 mb-1">{playerCard.pass || '-'}</div>
-                      <div className="text-xs font-medium text-green-700">PASS</div>
-                    </div>
-                    
-                    <div className="bg-purple-50 rounded-xl p-4 text-center">
-                      <div className="text-purple-600 mb-2">
-                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <div className="text-2xl font-bold text-purple-600 mb-1">{playerCard.defend || '-'}</div>
-                      <div className="text-xs font-medium text-purple-700">DEFEND</div>
-                    </div>
-                  </div>
-
-                  {/* Preferred Foot */}
-                  <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <div className="text-gray-600 mb-2">
-                      <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4 4 4 0 004-4V5z" />
-                      </svg>
-                    </div>
-                    <div className="text-lg font-semibold text-gray-800 mb-1">
-                      {playerCard.foot === 'L' ? 'Left Foot' : playerCard.foot === 'R' ? 'Right Foot' : 'Not specified'}
-                    </div>
-                    <div className="text-xs font-medium text-gray-600">PREFERRED FOOT</div>
-                  </div>
-
-                  {/* Overall Rating */}
-                  <div className="text-center">
-                    <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-full">
-                      <span className="text-sm font-medium">Overall Rating:</span>
-                      <span className="text-lg font-bold">
-                        {Math.round(((playerCard.pace || 0) + (playerCard.shoot || 0) + (playerCard.pass || 0) + (playerCard.defend || 0)) / 4 * 10) / 10}
-                      </span>
-                      <span className="text-sm">/5</span>
-                    </div>
-                  </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Shoot</div>
+                  <div className="text-2xl font-bold text-red-600">{playerCard.shoot || '-'}</div>
                 </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-500">Loading player stats...</p>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Pass</div>
+                  <div className="text-2xl font-bold text-green-600">{playerCard.pass || '-'}</div>
                 </div>
-              )}
-              
-              {/* Badges */}
-              {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-gray-100">
-                  <div className="text-center">
-                    <h5 className="text-sm font-semibold text-gray-700 mb-3">Achievements</h5>
-                    <div className="flex justify-center gap-2 flex-wrap">
-                      {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
-                        <div key={i} className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                          🏅 MVP Level {badge.level}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-500">Defend</div>
+                  <div className="text-2xl font-bold text-purple-600">{playerCard.defend || '-'}</div>
                 </div>
-              )}
-            </div>
+                <div className="col-span-2 text-center">
+                  <div className="text-sm text-gray-500">Preferred Foot</div>
+                  <div className="text-lg font-medium">{playerCard.foot === 'L' ? 'Left' : playerCard.foot === 'R' ? 'Right' : '-'}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500">Loading player stats...</div>
+            )}
+            
+            {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
+              <div className="mt-4 text-center">
+                <div className="text-sm text-gray-500 mb-1">Badges</div>
+                <div className="flex justify-center gap-1">
+                  {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
+                    <span key={i} className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                      🏅 MVP Lv{badge.level}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
