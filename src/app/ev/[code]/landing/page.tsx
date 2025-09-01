@@ -32,26 +32,6 @@ export default function Landing() {
   if (error) return <main className="p-6 max-w-xl mx-auto"><h1 className="text-xl font-bold">{error}</h1></main>;
   if (!eventData) return <main className="p-6 max-w-xl mx-auto">Loading…</main>;
 
-  const formatMeta = (e: Event) => {
-    try {
-      const base = e.date ? new Date(e.date) : null;
-      let when = '';
-      if (base) {
-        const dt = new Date(base);
-        if (e.startTime) {
-          const [hh, mm] = e.startTime.split(':').map(Number);
-          dt.setHours(hh || 0, mm || 0, 0, 0);
-        }
-        when = dt.toLocaleString(undefined, {
-          weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
-          hour: '2-digit', minute: '2-digit'
-        });
-      }
-      const dur = typeof e.durationMinutes === 'number' ? e.durationMinutes : 60;
-      return when ? `${when} • ${dur} min` : `${dur} min`;
-    } catch { return `${e.durationMinutes || 60} min`; }
-  };
-
   const go = async (mode: "join" | "view") => {
     if (!eventData) return;
     if (!me) { router.push(`/ev/${eventData.code}/nickname?mode=${mode}`); return; }
@@ -72,13 +52,22 @@ export default function Landing() {
     <main className="p-6 max-w-xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">{eventData.name || "Pickup Match"}</h1>
-        <p className="text-sm text-gray-400">{formatMeta(eventData)}</p>
+        <p className="text-sm text-gray-500">
+          {(() => {
+            try {
+              const d = eventData.date ? new Date(eventData.date) : null;
+              const day = d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : '';
+              const time = eventData.startTime ? `${eventData.startTime}` : '';
+              const dur = `${eventData.durationMinutes || 60} min`;
+              return [day, time, dur].filter(Boolean).join(' • ');
+            } catch { return `${eventData.startTime || ''} • ${eventData.durationMinutes || 60} min`; }
+          })()}
+        </p>
       </div>
       <div className="space-y-3">
         <button disabled={busy} onClick={() => go("join")} className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded disabled:opacity-50">{me? (busy? 'Processing…' : 'Join Team (skip nickname)') : 'Join Team'}</button>
         <button disabled={busy} onClick={() => go("view")} className="w-full border px-4 py-3 rounded disabled:opacity-50">{me? (busy? 'Processing…' : 'Continue as viewer (skip)') : 'Continue as viewer'}</button>
       </div>
-      {/* note removed per request */}
     </main>
   );
 }

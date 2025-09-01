@@ -96,7 +96,7 @@ export default function Home() {
 
   return (
     <main className="p-6 max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Create Event</h1>
+      <h1 className="text-2xl font-bold">Create a Halısaha Event</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -105,13 +105,13 @@ export default function Home() {
           {errors.name && <p className="text-sm text-red-600 mt-1">{errors.name}</p>}
         </div>
         <div>
-          <label className="block text-sm font-medium">Date (dd-mm-YYYY)</label>
-          <input placeholder="dd-mm-YYYY" className="border rounded p-2 w-full" value={date} onChange={(e) => setDate(maskDate(e.target.value))} onBlur={(e)=>setDate(normalizeDate(e.target.value))} inputMode="numeric" />
+          <label className="block text-sm font-medium">Date (DD–MM–YYYY)</label>
+          <input placeholder="DD–MM–YYYY" className="border rounded p-2 w-full" value={date} onChange={(e) => setDate(maskDate(e.target.value))} onBlur={(e)=>setDate(normalizeDate(e.target.value))} inputMode="numeric" aria-label="Date in DD-MM-YYYY" />
           {errors.date && <p className="text-sm text-red-600 mt-1">{errors.date}</p>}
         </div>
         <div>
-          <label className="block text-sm font-medium">Start Time (24h)</label>
-          <input placeholder="HH:MM" className="border rounded p-2 w-full" value={startTime} onChange={(e) => setStartTime(maskTime(e.target.value))} onBlur={(e)=>setStartTime(normalizeTime(e.target.value))} inputMode="numeric" />
+          <label className="block text-sm font-medium">Start Time (HH:MM, 24‑hour)</label>
+          <input placeholder="HH:MM" className="border rounded p-2 w-full" value={startTime} onChange={(e) => setStartTime(maskTime(e.target.value))} onBlur={(e)=>setStartTime(normalizeTime(e.target.value))} inputMode="numeric" aria-label="Start time in HH:MM 24-hour" />
           {errors.startTime && <p className="text-sm text-red-600 mt-1">{errors.startTime}</p>}
         </div>
         <div>
