@@ -201,9 +201,9 @@ export default function TeamsPage() {
 
   const resetEvent = async () => {
     if (!eventData || !isOwner) return;
-    if (!confirm('Are you sure you want to reset the event? Teams, assignments, and snapshots will be deleted.')) return;
+    if (!confirm('Reset teams and positions? Players will be kept.')) return;
     setBusy(true);
-    const r = await fetch(`/api/events/${eventData.id}`, { method: 'DELETE' });
+    const r = await fetch(`/api/events/${eventData.id}`, { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action: 'soft_reset' }) });
     if (r.ok) {
       const [plist, tlist] = await Promise.all([
         fetch(`/api/events/${eventData.id}/participants`).then((r)=>r.json()),
@@ -252,7 +252,7 @@ export default function TeamsPage() {
       if (pa[2]!==pb[2]) return pa[2]-pb[2];
       return pa[3]-pb[3];
     });
-    if (res.length===0) res.push({ v: '1-1-1-1', label: `${n}v${n}: 1-1-1-1` });
+    if (res.length===0) res.push({ v: '1-1-1-1', label: `${n}v${n}` });
     return res;
   };
 
@@ -309,7 +309,7 @@ export default function TeamsPage() {
       const id = draggingRef.current.id; draggingRef.current = null;
       const posi = pos.find(p=>p.participantId===id);
       if (!posi) return;
-      if (isOwner && !eventData?.lineupLocked) {
+      if (!eventData?.lineupLocked) {
         await fetch(`/api/teams/${team.id}/positions`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ participantId:id, x: posi.x, y: posi.y }) });
         const fresh = await fetch(`/api/teams/${team.id}/positions`).then(r=>r.json()); setPos(fresh);
       }
@@ -421,7 +421,7 @@ export default function TeamsPage() {
           </ul>
         </div>
         <div className="border rounded p-3">
-          <div className="flex items-center justify-end gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <TeamBalance eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
             <button onClick={async()=>{ if (!eventData) return; await fetch(`/api/events/${eventData.id}/snapshot`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ note: 'manual-save' }) }); alert('Saved'); }} className="border px-3 py-2 rounded">Save</button>
           </div>
