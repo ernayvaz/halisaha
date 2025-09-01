@@ -408,12 +408,14 @@ export default function TeamsPage() {
                    e.stopPropagation();
                    showPlayerCard(part);
                  }}>
-              <div className="relative cursor-pointer text-center">
-                {bubble(label, team.color)}
-                {!part.isGuest && (
-                  <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
-                )}
-                <div className="text-[8px] text-white font-medium mt-1 max-w-[40px] truncate bg-black/50 rounded px-1">
+              <div className="relative cursor-pointer flex flex-col items-center">
+                <div className="relative">
+                  {bubble(label, team.color)}
+                  {!part.isGuest && (
+                    <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
+                  )}
+                </div>
+                <div className="text-[8px] text-white font-medium mt-1 max-w-[50px] truncate bg-black/70 rounded px-1 text-center">
                   {label}
                 </div>
               </div>
@@ -454,77 +456,82 @@ export default function TeamsPage() {
       <p className="text-sm text-gray-500">Assign players via → buttons or use Auto-balance. Only the creator can change teams and positions.</p>
       {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
-      {/* Team 1 Section */}
-      <section className="space-y-4">
-        <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Team 1 Left: Settings */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="font-medium">Team 1</h2>
-              <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#dc2626'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
-                if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#dc2626'; upsertTeam(1,{color:'#dc2626'}); } else { upsertTeam(1,{color:v}); } }} />
+            {/* Teams Layout: Team1 Box + Field, Team2 Field + Box */}
+      <section className="space-y-6">
+        {/* Top Row: Team 1 Box + Team 1 Field */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Team 1 Box */}
+          <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Team 1 Left: Settings */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className="font-medium">Team 1</h2>
+                <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#dc2626'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
+                  if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#dc2626'; upsertTeam(1,{color:'#dc2626'}); } else { upsertTeam(1,{color:v}); } }} />
+              </div>
+              <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
+              <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
+                {optionsForSize(size1).map(o=> (
+                  <option key={o.v} value={o.v}>{o.label}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
             </div>
-            <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
-            <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
-              {optionsForSize(size1).map(o=> (
-                <option key={o.v} value={o.v}>{o.label}</option>
-              ))}
-            </select>
-            <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
+            
+            {/* Team 1 Right: Roster */}
+            <div className="space-y-2">
+              <h3 className="font-medium">Team 1 Roster</h3>
+              <ul className="space-y-1">
+                {asgnTeam1.map(a=> (
+                  <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                    <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
           
-          {/* Team 1 Right: Roster */}
-          <div className="space-y-2">
-            <h3 className="font-medium">Team 1 Roster</h3>
-            <ul className="space-y-1">
-              {asgnTeam1.map(a=> (
-                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {/* Team 1 Field */}
+          <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
         </div>
-        
-        {/* Team 1 Field */}
-        <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
-      </section>
 
-      {/* Team 2 Section */}
-      <section className="space-y-4">
-        <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Team 2 Left: Settings */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h2 className="font-medium">Team 2</h2>
-              <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#f59e0b'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#f59e0b'; upsertTeam(2,{color:'#f59e0b'}); } else { upsertTeam(2,{color:v}); } }} />
-            </div>
-            <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
-            <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
-              {optionsForSize(size2).map(o=> (
-                <option key={o.v} value={o.v}>{o.label}</option>
-              ))}
-            </select>
-            <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
-          </div>
+        {/* Bottom Row: Team 2 Field + Team 2 Box */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Team 2 Field */}
+          <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
           
-          {/* Team 2 Right: Roster */}
-          <div className="space-y-2">
-            <h3 className="font-medium">Team 2 Roster</h3>
-            <ul className="space-y-1">
-              {asgnTeam2.map(a=> (
-                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                </li>
-              ))}
-            </ul>
+          {/* Team 2 Box */}
+          <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Team 2 Left: Settings */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className="font-medium">Team 2</h2>
+                <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#f59e0b'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#f59e0b'; upsertTeam(2,{color:'#f59e0b'}); } else { upsertTeam(2,{color:v}); } }} />
+              </div>
+              <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
+              <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
+                {optionsForSize(size2).map(o=> (
+                  <option key={o.v} value={o.v}>{o.label}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
+            </div>
+            
+            {/* Team 2 Right: Roster */}
+            <div className="space-y-2">
+              <h3 className="font-medium">Team 2 Roster</h3>
+              <ul className="space-y-1">
+                {asgnTeam2.map(a=> (
+                  <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                    <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
-        
-        {/* Team 2 Field */}
-        <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -549,35 +556,37 @@ export default function TeamsPage() {
                   )}
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
-                <div className="flex gap-2">
+                                <div className="flex gap-2">
                     {(() => { 
                       const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
                       const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
                       const c = team1?.color || '#dc2626'; 
+                      const teamName = team1?.name || 'Team 1';
                       return <button 
                         onClick={()=>assign(1,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
                         style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam2 ? 0.5 : 1 }}
                         disabled={inTeam1}
                       >
-                        Team 1
+                        {teamName}
                       </button>; 
                     })()}
                     {(() => { 
                       const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
                       const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
                       const c = team2?.color || '#f59e0b'; 
+                      const teamName = team2?.name || 'Team 2';
                       return <button 
                         onClick={()=>assign(2,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
                         style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam1 ? 0.5 : 1 }}
                         disabled={inTeam2}
                       >
-                        Team 2
+                        {teamName}
                       </button>; 
                     })()}
-                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
-                </div>
+                    <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
+                  </div>
               </li>
             ))}
           </ul>
