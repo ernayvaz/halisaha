@@ -117,8 +117,8 @@ export default function Home() {
           {errors.date && <p className="text-sm text-red-600 mt-1">{errors.date}</p>}
         </div>
         <div>
-          <label className="block text-sm font-medium">Start Time (HH:MM, 24‑hour)</label>
-          <input type="time" className="border rounded p-2 w-full" placeholder="HH:MM" value={startTime} onChange={(e) => setStartTime(normalizeTime(e.target.value))} step={60} aria-label="Start time (HH:MM, 24-hour)" />
+          <label className="block text-sm font-medium">Start Time (HH:MM)</label>
+          <input type="time" className="border rounded p-2 w-full" placeholder="HH:MM" title="HH:MM (24-hour)" value={startTime} onChange={(e) => setStartTime(normalizeTime(e.target.value))} step={60} aria-label="Start time HH:MM" />
           {errors.startTime && <p className="text-sm text-red-600 mt-1">{errors.startTime}</p>}
         </div>
         <div>
