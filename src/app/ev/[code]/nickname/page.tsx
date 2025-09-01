@@ -122,19 +122,27 @@ export default function NicknamePage() {
               </div>
               <div>
                 <label className="block text-sm">Pace</label>
-                <input type="number" min={1} max={5} className="border rounded p-2 w-full" value={ensureBase().pace ?? 3} onChange={(e)=>setCard({ ...ensureBase(), pace: parseInt(e.target.value||'3',10) })} />
+                <select value={ensureBase().pace ?? 3} onChange={(e)=>setCard({ ...ensureBase(), pace: parseInt(e.target.value,10) })}>
+                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-sm">Shoot</label>
-                <input type="number" min={1} max={5} className="border rounded p-2 w-full" value={ensureBase().shoot ?? 3} onChange={(e)=>setCard({ ...ensureBase(), shoot: parseInt(e.target.value||'3',10) })} />
+                <select value={ensureBase().shoot ?? 3} onChange={(e)=>setCard({ ...ensureBase(), shoot: parseInt(e.target.value,10) })}>
+                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-sm">Pass</label>
-                <input type="number" min={1} max={5} className="border rounded p-2 w-full" value={ensureBase().pass ?? 3} onChange={(e)=>setCard({ ...ensureBase(), pass: parseInt(e.target.value||'3',10) })} />
+                <select value={ensureBase().pass ?? 3} onChange={(e)=>setCard({ ...ensureBase(), pass: parseInt(e.target.value,10) })}>
+                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-sm">Defend</label>
-                <input type="number" min={1} max={5} className="border rounded p-2 w-full" value={ensureBase().defend ?? 3} onChange={(e)=>setCard({ ...ensureBase(), defend: parseInt(e.target.value||'3',10) })} />
+                <select value={ensureBase().defend ?? 3} onChange={(e)=>setCard({ ...ensureBase(), defend: parseInt(e.target.value,10) })}>
+                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
               </div>
             </div>
           </div>

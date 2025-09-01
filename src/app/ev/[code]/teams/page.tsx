@@ -26,6 +26,11 @@ export default function TeamsPage() {
   const [busy, setBusy] = useState(false);
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
+  // Add state for loading
+  const [loading, setLoading] = useState(false);
+  // Add modal state
+  const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
+  const [playerCard, setPlayerCard] = useState<any>(null);
 
   function positionsForFormation(formation: string): { x:number; y:number }[] {
     const parts = formation.split('-').map((n)=>parseInt(n,10));
@@ -369,6 +374,12 @@ export default function TeamsPage() {
     }
   };
 
+  // Function to load card
+  const loadCard = async (userId: string) => {
+    const r = await fetch(`/api/users/${userId}/card`);
+    if (r.ok) setPlayerCard(await r.json());
+  };
+
   if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
 
   return (
@@ -479,6 +490,14 @@ export default function TeamsPage() {
       </section>
       {/* modal removed per requirement */}
       {busy && <p className="text-sm text-gray-500">Processing…</p>}
+      {selectedPlayer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+          <div className="bg-white p-4 rounded">
+            {/* Render card */}
+            <button onClick={() => setSelectedPlayer(null)}>Close</button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

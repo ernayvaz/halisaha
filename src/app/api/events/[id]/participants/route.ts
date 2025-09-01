@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   const count = await prisma.participant.count({ where: { eventId: id } });
-  const role = count === 0 ? 'owner' : 'player';
+  const role = 'player'; // No more auto-owner
 
   const participant = await prisma.participant.create({
     data: {

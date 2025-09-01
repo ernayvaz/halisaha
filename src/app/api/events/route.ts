@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rateLimit';
+import { cookies } from 'next/headers';
 
 export const runtime = 'nodejs';
 
@@ -65,8 +66,8 @@ export async function POST(req: NextRequest) {
     const errors: Record<string, string> = {};
     if (!name || name.trim().length < 2) errors.name = 'Event name is required';
     if (!date) errors.date = 'Date (dd-mm-YYYY) is required';
-    const dateObj = parseDateLoose(date);
-    if (date && !dateObj) errors.date = 'Date must be in dd-mm-YYYY format';
+    const parsedDate = parseDateLoose(date);
+    if (date && !parsedDate) errors.date = 'Date must be in dd-mm-YYYY format';
     if (!startTime || !isValidTimeHHMM(startTime)) errors.startTime = 'Start time (HH:MM 24h) is required';
     const dur = typeof durationMinutes === 'number' ? durationMinutes : Number(durationMinutes);
     if (!Number.isFinite(dur) || dur <= 0 || dur > 300) errors.durationMinutes = 'Duration (minutes) must be between 1 and 300';
@@ -86,11 +87,32 @@ export async function POST(req: NextRequest) {
       data: {
         code,
         name: name || null,
-        date: dateObj!,
+        date: parsedDate!,
         startTime: startTime || null,
         durationMinutes: dur,
       },
     });
+
+    // Assign owner: use device cookie to get userId
+    const cookieStore = await cookies();
+    const deviceToken = cookieStore.get('device_token')?.value;
+    let ownerUserId = null;
+    if (deviceToken) {
+      const device = await prisma.device.findUnique({ where: { deviceToken }, select: { userId: true } });
+      ownerUserId = device?.userId;
+    }
+
+    // Create first participant as owner
+    if (ownerUserId) {
+      await prisma.participant.create({
+        data: {
+          eventId: event.id,
+          userId: ownerUserId,
+          role: 'owner',
+        },
+      });
+    }
+
     return NextResponse.json(event, { status: 201 });
   } catch (err: any) {
     console.error('POST /api/events error', err);
