@@ -256,11 +256,22 @@ export default function TeamsPage() {
     return res;
   };
 
-  const bubble = (name: string, color?: string) => (
-    <div className="w-6 h-6 rounded-full border-2 border-white shadow flex items-center justify-center text-[10px] text-black font-semibold" style={{ backgroundColor: color || '#86efac' }} title={name}>
-      {(name||'?').slice(0,1).toUpperCase()}
-    </div>
-  );
+  const bubble = (name: string, color?: string) => {
+    const bg = color || '#86efac';
+    // luminance-based contrast: simple heuristic
+    const rgb = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(bg);
+    let textColor = '#000';
+    if (rgb) {
+      const r = parseInt(rgb[1],16), g = parseInt(rgb[2],16), b = parseInt(rgb[3],16);
+      const lum = (0.2126*r + 0.7152*g + 0.0722*b)/255;
+      textColor = lum < 0.5 ? '#fff' : '#000';
+    }
+    return (
+      <div className="w-6 h-6 rounded-full border-2 border-white shadow flex items-center justify-center text-[10px] font-semibold" style={{ backgroundColor: bg, color: textColor }} title={name}>
+        {(name||'?').slice(0,1).toUpperCase()}
+      </div>
+    );
+  };
 
   const MVPBadge = ({ p }: { p: Participant }) => {
     const b = (p.user as any)?.badges && (p.user as any).badges[0];
@@ -295,8 +306,11 @@ export default function TeamsPage() {
     const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       if (!fieldRef.current || !draggingRef.current) return;
       const rect = fieldRef.current.getBoundingClientRect();
-      const x = clamp((e.clientX - rect.left)/rect.width,0,1);
-      const y = clamp((e.clientY - rect.top)/rect.height,0,1);
+      // PointerEvent covers mouse/touch/pen; use clientX/clientY uniformly
+      const clientX = (e as any).clientX ?? 0;
+      const clientY = (e as any).clientY ?? 0;
+      const x = clamp((clientX - rect.left)/rect.width,0,1);
+      const y = clamp((clientY - rect.top)/rect.height,0,1);
       const id = draggingRef.current.id;
       setPos(prev=>{
         const idx = prev.findIndex(p=>p.participantId===id);
@@ -344,10 +358,15 @@ export default function TeamsPage() {
 
   const addGuest = async (name: string) => {
     if (!eventData || !name) return;
-    await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
-    await refreshTeamData(eventData.id, teams);
-    const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json());
-    setParticipants(plist);
+    const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
+    if (r.ok) {
+      const [plist, tlist] = await Promise.all([
+        fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()),
+        fetch(`/api/events/${eventData.id}/teams`).then(r=>r.json()),
+      ]);
+      setParticipants(plist);
+      await refreshTeamData(eventData.id, tlist);
+    }
   };
 
   if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
@@ -412,8 +431,8 @@ export default function TeamsPage() {
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
-                  <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: team1?.color || '#16a34a', color: '#fff' }}>→ 1</button>
-                  <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor: team2?.color || '#16a34a', color: '#fff' }}>→ 2</button>
+                  {(() => { const c=team1?.color||'#16a34a'; const t=(()=>{const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(c); if(!m) return '#fff'; const r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16); const lum=(0.2126*r+0.7152*g+0.0722*b)/255; return lum<0.5?'#fff':'#000';})(); return <button onClick={()=>assign(1,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor:c, color:t }}>→ 1</button>; })()}
+                  {(() => { const c=team2?.color||'#16a34a'; const t=(()=>{const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(c); if(!m) return '#fff'; const r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16); const lum=(0.2126*r+0.7152*g+0.0722*b)/255; return lum<0.5?'#fff':'#000';})(); return <button onClick={()=>assign(2,p.id)} className="text-xs border rounded px-2 py-1" style={{ backgroundColor:c, color:t }}>→ 2</button>; })()}
                   <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
                 </div>
               </li>
@@ -421,7 +440,7 @@ export default function TeamsPage() {
           </ul>
         </div>
         <div className="border rounded p-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-center justify-end gap-3">
             <TeamBalance eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
             <button onClick={async()=>{ if (!eventData) return; await fetch(`/api/events/${eventData.id}/snapshot`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ note: 'manual-save' }) }); alert('Saved'); }} className="border px-3 py-2 rounded">Save</button>
           </div>
