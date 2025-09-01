@@ -176,22 +176,22 @@ export default function TeamsPage() {
     if (!eventData || !isOwner || busy) return;
     setBusy(true);
     
-    // Optimistic update
-    const currentTeam = team(index);
-    const defaultColors = { 1: '#dc2626', 2: '#f59e0b' }; // dark red, sunset yellow
-    const updatedTeam = { 
-      ...currentTeam, 
-      name: partial.name ?? currentTeam?.name ?? `Team ${index}`, 
-      color: partial.color ?? currentTeam?.color ?? defaultColors[index],
-      formation: partial.formation ?? currentTeam?.formation ?? '1-2-2-1'
-    };
+          // Optimistic update
+      const currentTeam = team(index);
+      const defaultColors = { 1: '#dc2626', 2: '#f59e0b' }; // dark red, sunset yellow
+      const updatedTeam = { 
+        ...currentTeam, 
+        name: partial.name ?? currentTeam?.name ?? `Team ${index}`, 
+        color: partial.color ?? currentTeam?.color ?? defaultColors[index],
+        formation: partial.formation ?? currentTeam?.formation ?? '1-2-2-1'
+      };
     const other = teams.filter(x=>x.index!==index);
     setTeams([...other, updatedTeam as Team].sort((a,b)=>a.index-b.index));
     
     try {
-    const body = { index, name: partial.name ?? team(index)?.name ?? `Team ${index}`, color: partial.color ?? team(index)?.color, formation: partial.formation ?? team(index)?.formation };
-    const r = await fetch(`/api/events/${eventData.id}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const t = await r.json();
+      const body = { index, name: partial.name ?? team(index)?.name ?? `Team ${index}`, color: partial.color ?? team(index)?.color, formation: partial.formation ?? team(index)?.formation };
+      const r = await fetch(`/api/events/${eventData.id}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const t = await r.json();
       const finalOther = teams.filter(x=>x.index!==index);
       setTeams([...finalOther, t].sort((a,b)=>a.index-b.index));
     } catch (error) {
@@ -208,28 +208,28 @@ export default function TeamsPage() {
     if (!t) return;
     
     // Check if player is already in the selected team
-      const from1 = asgnTeam1.find(a=>a.participantId===participantId);
-      const from2 = asgnTeam2.find(a=>a.participantId===participantId);
-      const participant = participants.find(p=>p.id===participantId);
-      if (!participant) return;
+    const from1 = asgnTeam1.find(a=>a.participantId===participantId);
+    const from2 = asgnTeam2.find(a=>a.participantId===participantId);
+    const participant = participants.find(p=>p.id===participantId);
+    if (!participant) return;
     
     // If player is already in the selected team, do nothing
     if ((idx === 1 && from1) || (idx === 2 && from2)) return;
     
-      const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
+    const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
     
     // Remove from other team and add to selected team
     if (idx === 1) {
       setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
       if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
-      } else {
+    } else {
       setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
       if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
-      }
+    }
     
     // Update counts immediately
-      const t1 = team1; const t2 = team2;
-      if (t1 && t2) {
+    const t1 = team1; const t2 = team2;
+    if (t1 && t2) {
       const c1 = idx === 1 ? asgnTeam1.length + 1 - (from1 ? 0 : 0) - (from2 ? 1 : 0) : asgnTeam1.length - (from1 ? 1 : 0);
       const c2 = idx === 2 ? asgnTeam2.length + 1 - (from2 ? 0 : 0) - (from1 ? 1 : 0) : asgnTeam2.length - (from2 ? 1 : 0);
       setAssignmentsByTeam({ ...(assignmentsByTeam||{}), [t1.id]: Math.max(0, c1), [t2.id]: Math.max(0, c2) });
@@ -456,11 +456,11 @@ export default function TeamsPage() {
           <div className="space-y-3">
           <h2 className="font-medium">Team 1</h2>
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Color</label>
-                       <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#dc2626'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
-               if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#dc2626'; upsertTeam(1,{color:'#dc2626'}); } else { upsertTeam(1,{color:v}); } }} />
-          </div>
+                      <div className="flex items-center gap-2">
+              <label className="text-sm">Color</label>
+              <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#dc2626'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
+                if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#dc2626'; upsertTeam(1,{color:'#dc2626'}); } else { upsertTeam(1,{color:v}); } }} />
+            </div>
           <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
             {optionsForSize(size1).map(o=> (
               <option key={o.v} value={o.v}>{o.label}</option>
@@ -468,27 +468,27 @@ export default function TeamsPage() {
           </select>
           <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
           </div>
-          <div className="space-y-2">
-            <h3 className="font-medium">Team 1 Roster</h3>
-                         <ul className="space-y-1">
-              {asgnTeam1.map(a=> (
-                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                </li>
-              ))}
-            </ul>
-          </div>
+                      <div className="space-y-2">
+              <h3 className="font-medium">Team 1 Roster</h3>
+              <ul className="space-y-1">
+                {asgnTeam1.map(a=> (
+                  <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                    <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
         </div>
         <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
         <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           <div className="space-y-3">
           <h2 className="font-medium">Team 2</h2>
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
-          <div className="flex items-center gap-2">
-            <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#f59e0b'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#f59e0b'; upsertTeam(2,{color:'#f59e0b'}); } else { upsertTeam(2,{color:v}); } }} />
-          </div>
+                      <div className="flex items-center gap-2">
+              <label className="text-sm">Color</label>
+             <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#f59e0b'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#f59e0b'; upsertTeam(2,{color:'#f59e0b'}); } else { upsertTeam(2,{color:v}); } }} />
+            </div>
           <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
             {optionsForSize(size2).map(o=> (
               <option key={o.v} value={o.v}>{o.label}</option>
@@ -496,17 +496,17 @@ export default function TeamsPage() {
           </select>
           <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
           </div>
-          <div className="space-y-2">
-            <h3 className="font-medium">Team 2 Roster</h3>
-                         <ul className="space-y-1">
-              {asgnTeam2.map(a=> (
-                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                </li>
-              ))}
-            </ul>
-          </div>
+                      <div className="space-y-2">
+              <h3 className="font-medium">Team 2 Roster</h3>
+              <ul className="space-y-1">
+                {asgnTeam2.map(a=> (
+                  <li key={a.id} className="py-1 text-sm flex justify-between items-center">
+                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                    <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
         </div>
         <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
       </section>
@@ -515,7 +515,7 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            <button onClick={async()=>{ if (!eventData) return; const count = participants.filter(p=>p.isGuest).length + 1; const defaultName = `Guest ${count}`; await addGuest(defaultName); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
+                        <button onClick={async()=>{ if (!eventData) return; const count = participants.filter(p=>p.isGuest).length + 1; const defaultName = `Guest ${count}`; await addGuest(defaultName); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
           </div>
           <ul className="space-y-2">
             {participants.map((p)=> (
@@ -533,35 +533,35 @@ export default function TeamsPage() {
                   )}
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
-                <div className="flex gap-2">
-                                     {(() => { 
-                     const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                     const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                     const c = team1?.color || '#dc2626'; 
-                     return <button 
-                       onClick={()=>assign(1,p.id)} 
-                       className={`text-xs border rounded px-2 py-1 ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                       style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam2 ? 0.5 : 1 }}
-                       disabled={inTeam1}
-                     >
-                       Team 1
-                     </button>; 
-                   })()}
-                   {(() => { 
-                     const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                     const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                     const c = team2?.color || '#f59e0b'; 
-                     return <button 
-                       onClick={()=>assign(2,p.id)} 
-                       className={`text-xs border rounded px-2 py-1 ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                       style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam1 ? 0.5 : 1 }}
-                       disabled={inTeam2}
-                     >
-                       Team 2
-                     </button>; 
-                   })()}
-                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
-                </div>
+                                  <div className="flex gap-2">
+                    {(() => { 
+                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                      const c = team1?.color || '#dc2626'; 
+                      return <button 
+                        onClick={()=>assign(1,p.id)} 
+                        className={`text-xs border rounded px-2 py-1 ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam2 ? 0.5 : 1 }}
+                        disabled={inTeam1}
+                      >
+                        Team 1
+                      </button>; 
+                    })()}
+                    {(() => { 
+                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                      const c = team2?.color || '#f59e0b'; 
+                      return <button 
+                        onClick={()=>assign(2,p.id)} 
+                        className={`text-xs border rounded px-2 py-1 ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam1 ? 0.5 : 1 }}
+                        disabled={inTeam2}
+                      >
+                        Team 2
+                      </button>; 
+                    })()}
+                    <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
+                  </div>
               </li>
             ))}
           </ul>
