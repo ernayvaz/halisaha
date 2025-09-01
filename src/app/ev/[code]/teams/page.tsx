@@ -24,7 +24,8 @@ export default function TeamsPage() {
   const [posTeam2, setPosTeam2] = useState<Position[]>([]);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
-  // guest modal removed; keep no state
+  const [guestOpen, setGuestOpen] = useState(false);
+  const [guestName, setGuestName] = useState('');
 
   function positionsForFormation(formation: string): { x:number; y:number }[] {
     const parts = formation.split('-').map((n)=>parseInt(n,10));
@@ -337,10 +338,13 @@ export default function TeamsPage() {
           const posi = tokenPos(i, a.participantId);
           const label = labelFor(a.participantId);
           const part = a.participant;
+          const isT1 = !!asgnTeam1.find(x=>x.participantId===a.participantId);
+          const isT2 = !!asgnTeam2.find(x=>x.participantId===a.participantId);
+          const bg = isT1 ? '#166534' : isT2 ? '#166534' : undefined; // field green tone
           return (
             <div key={a.id} className="absolute" style={{ left: `${posi.x*100}%`, top: `${posi.y*100}%`, transform:'translate(-50%,-50%)' }} onPointerDown={(e)=>onPointerDown(e, a.participantId)}>
               <div className="relative">
-                {bubble(label, team.color)}
+                {bubble(label, bg || team.color)}
                 {!part.isGuest && (
                   <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
                 )}
@@ -388,7 +392,7 @@ export default function TeamsPage() {
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
           <div className="flex items-center gap-2">
             <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#16a34a'} onChange={(e)=>upsertTeam(1,{color:e.target.value})} />
+            <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#16a34a'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (v==="#166534"||v==="#0a7f3f"||v==="#0f6"||v==="#008000") { alert('Please choose a color distinct from field green'); return; } upsertTeam(1,{color:v}); }} />
           </div>
           <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
             {optionsForSize(size1).map(o=> (
@@ -403,7 +407,7 @@ export default function TeamsPage() {
           <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
           <div className="flex items-center gap-2">
             <label className="text-sm">Color</label>
-            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#16a34a'} onChange={(e)=>upsertTeam(2,{color:e.target.value})} />
+            <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#16a34a'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (v==="#166534"||v==="#0a7f3f"||v==="#0f6"||v==="#008000") { alert('Please choose a color distinct from field green'); return; } upsertTeam(2,{color:v}); }} />
           </div>
           <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
             {optionsForSize(size2).map(o=> (
@@ -427,7 +431,7 @@ export default function TeamsPage() {
                 <span className="flex items-center gap-1">
                   <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center" title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}>{(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}</div>
                   {p.isGuest ? (
-                    <input className="text-sm bg-transparent border-b border-dashed focus:outline-none" defaultValue={p.guestName || `Guest`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); }} />
+                    <input className="text-sm bg-transparent border-b border-dashed focus:outline-none" defaultValue={p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p)+1}`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); }} />
                   ) : (
                     <span className="text-sm">{p.user?.displayName || p.user?.handle}</span>
                   )}
@@ -449,7 +453,7 @@ export default function TeamsPage() {
           </div>
         </div>
       </section>
-      {/* guest modal removed by requirement */}
+      {/* modal removed by requirement */}
       {busy && <p className="text-sm text-gray-500">Processing…</p>}
     </main>
   );
