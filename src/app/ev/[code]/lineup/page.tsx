@@ -190,7 +190,7 @@ export default function LineupPage() {
           <div className="text-xs text-gray-500">{teams.find(x=>x.index===selectedTeamIdx)?.formation || '1-2-2-1'}</div>
         </div>
 
-        <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative h-80 bg-green-100 rounded overflow-hidden touch-none" style={{ aspectRatio: '155 / 100' }}>
+        <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative w-full h-80 bg-green-100 rounded overflow-hidden touch-none">
           <div className="absolute inset-0 grid grid-cols-4 grid-rows-4">
             {Array.from({length:16}).map((_,i)=>(<div key={i} className="border border-green-200"/>))}
           </div>

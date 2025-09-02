@@ -24,7 +24,9 @@ export default function TeamsPage() {
   const [posTeam2, setPosTeam2] = useState<Position[]>([]);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
-  const [optimisticUpdate, setOptimisticUpdate] = useState<any>(null);
+  const [addingGuest, setAddingGuest] = useState(false);
+  const [optimisticUpdate, setOptimisticUpdate] = useState<number | null>(null);
+  const [lastGuestAddedAt, setLastGuestAddedAt] = useState<number>(0);
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
@@ -134,11 +136,21 @@ export default function TeamsPage() {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
       unsub = subscribe(e.id, (evt: RealtimeEvent)=>{
         if (evt.type==='participants_updated') {
-          // Lightweight refresh on participants change to avoid wiping local selections
+          // Participants-only update to avoid resetting team assignments/positions
           fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()).then(setParticipants).catch(()=>{});
           return;
         }
         if (evt.type==='teams_updated' || evt.type==='assignments_updated' || evt.type==='flags_updated' || evt.type==='positions_updated') {
+          if (lastGuestAddedAt && Date.now() - lastGuestAddedAt < 1200) {
+            return;
+          }
+          // Avoid clobbering local optimistic assignment changes while
+          // debounced writes are in-flight.
+          if (optimisticUpdate && (Date.now() - optimisticUpdate < 1200)) {
+            // Still update participants list (e.g., when +1 Guest is added)
+            fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()).then(setParticipants).catch(()=>{});
+            return;
+          }
           gateIfNeeded(code);
           Promise.all([
             fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()).then(setParticipants),
@@ -152,7 +164,7 @@ export default function TeamsPage() {
               await ensureFormationIfMissing(e.id, tlist, counts);
               await refreshTeamData(e.id, tlist);
             }),
-          ]).catch(()=>{});
+          ]);
         }
       });
     })();
@@ -240,6 +252,7 @@ export default function TeamsPage() {
     // Immediate UI feedback for all users
       const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
     
+    setOptimisticUpdate(Date.now());
     if (idx === 1) {
       setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
       if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
@@ -268,6 +281,8 @@ export default function TeamsPage() {
           await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
         } catch (error) {
           console.error('Assignment failed:', error);
+        } finally {
+          setTimeout(()=>setOptimisticUpdate(null), 400);
         }
       }, 300); // 300ms debounce
       
@@ -467,7 +482,7 @@ export default function TeamsPage() {
     const isTeam2 = team.index === 2;
 
     return (
-      <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative h-48 bg-green-700 rounded overflow-hidden border-2 border-gray-300" style={{ aspectRatio: '155 / 100' }}>
+      <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative w-full h-48 bg-green-700 rounded overflow-hidden border-2 border-gray-300">
         {/* Main field boundary */}
         <div className="absolute inset-2 border-2 border-white rounded-sm" />
         
@@ -527,30 +542,27 @@ export default function TeamsPage() {
   };
 
   const addGuest = async () => {
-    if (!eventData) return;
-    // Optimistic UI: insert a temporary guest immediately
-    const nextIdx = (participants.filter(p=>p.isGuest).length || 0) + 1;
-    const tempId = `temp-guest-${Date.now()}`;
-    const temp: Participant = { id: tempId, isGuest: true, guestName: `Guest ${nextIdx}`, user: undefined as any };
-    setParticipants(prev => [...prev, temp]);
-
+    if (!eventData || addingGuest) return;
+    setAddingGuest(true);
     try {
       const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join' }) });
       if (!r.ok) throw new Error('guest add failed');
       const created = await r.json();
-      // Replace temp with created
-      setParticipants(prev => prev.map(p => p.id === tempId ? created : p));
+      // Optimistically append the new guest without reloading lists to avoid
+      // unnecessary re-fetches that can momentarily reset assignment UIs.
+      setParticipants((prev) => Array.isArray(prev) ? [...prev, created] : [created]);
+      setLastGuestAddedAt(Date.now());
     } catch (error) {
-      // Revert optimistic insert on failure
-      setParticipants(prev => prev.filter(p => p.id !== tempId));
       console.error('Failed to add guest:', error);
+    } finally {
+      setAddingGuest(false);
     }
   };
 
-  if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
+  if (!eventData) return <main className="p-6 max-w-3xl mx-auto">Loading…</main>;
 
   return (
-    <main className="p-6 max-w-4xl mx-auto space-y-6">
+    <main className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Teams</h1>
         <div className="flex items-center gap-2">
@@ -566,7 +578,7 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            <button onClick={addGuest} className="text-xs border rounded px-2 py-1">+1 Guest</button>
+            <button onClick={addGuest} disabled={addingGuest} className="text-xs border rounded px-2 py-1 disabled:opacity-50">{addingGuest? 'Adding…' : '+1 Guest'}</button>
           </div>
           <ul className="space-y-2">
             {participants.map((p)=> (
@@ -664,7 +676,7 @@ export default function TeamsPage() {
           </div>
           
           {/* Team 1 Field - matching height */}
-          <div className="h-48" style={{ maxWidth: '100%', display: 'block' }}>
+          <div className="h-48">
             <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
           </div>
         </div>
@@ -672,7 +684,7 @@ export default function TeamsPage() {
         {/* Bottom Row: Team 2 Field + Team 2 Box (same height) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Team 2 Field - matching height */}
-          <div className="h-48" style={{ maxWidth: '100%', display: 'block' }}>
+          <div className="h-48">
             <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
           </div>
           
