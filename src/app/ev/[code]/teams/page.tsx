@@ -29,6 +29,7 @@ export default function TeamsPage() {
   const [guestName, setGuestName] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
   const [playerCard, setPlayerCard] = useState<any>(null);
+  const [debounceTimers, setDebounceTimers] = useState<Record<string, NodeJS.Timeout>>({});
 
   const showPlayerCard = async (participant: Participant) => {
     setSelectedPlayer(participant);
@@ -218,7 +219,7 @@ export default function TeamsPage() {
     setBusy(false);
   };
 
-  const assign = async (idx: 1|2, participantId: string) => {
+    const assign = (idx: 1|2, participantId: string) => {
     const t = team(idx);
     if (!t) return;
     
@@ -231,39 +232,47 @@ export default function TeamsPage() {
     // If player is already in the selected team, do nothing
     if ((idx === 1 && from1) || (idx === 2 && from2)) return;
     
-    if (isOwner) {
-      // For owners: make API call first, then let realtime update handle UI
-      try {
-        if (from1 || from2) {
-          const otherTeamId = from1 ? team1?.id : team2?.id;
-          if (otherTeamId) {
-            await fetch(`/api/teams/${otherTeamId}/assignments?participantId=${participantId}`, { method: 'DELETE' });
-          }
-        }
-        await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
-        // Don't update UI here - let realtime events handle it
-      } catch (error) {
-        console.error('Assignment failed:', error);
-      }
-    } else {
-      // For non-owners: optimistic update only (local preview)
+    // Immediate UI feedback for all users
       const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
-      
-      if (idx === 1) {
-        setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
-        if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
+    
+    if (idx === 1) {
+      setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
+      if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
       } else {
-        setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
-        if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
+      setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
+      if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
       }
-      
-      // Update counts for local preview
+    
+    // Update counts immediately
       const t1 = team1; const t2 = team2;
       if (t1 && t2) {
-        const c1 = idx === 1 ? asgnTeam1.length + 1 - (from1 ? 0 : 0) - (from2 ? 1 : 0) : asgnTeam1.length - (from1 ? 1 : 0);
-        const c2 = idx === 2 ? asgnTeam2.length + 1 - (from2 ? 0 : 0) - (from1 ? 1 : 0) : asgnTeam2.length - (from2 ? 1 : 0);
-        setAssignmentsByTeam({ ...(assignmentsByTeam||{}), [t1.id]: Math.max(0, c1), [t2.id]: Math.max(0, c2) });
+      const c1 = idx === 1 ? asgnTeam1.length + 1 - (from1 ? 0 : 0) - (from2 ? 1 : 0) : asgnTeam1.length - (from1 ? 1 : 0);
+      const c2 = idx === 2 ? asgnTeam2.length + 1 - (from2 ? 0 : 0) - (from1 ? 1 : 0) : asgnTeam2.length - (from2 ? 1 : 0);
+      setAssignmentsByTeam({ ...(assignmentsByTeam||{}), [t1.id]: Math.max(0, c1), [t2.id]: Math.max(0, c2) });
+    }
+
+    if (isOwner) {
+      // Debounced API call for owners
+      const key = `assign-${participantId}`;
+      if (debounceTimers[key]) {
+        clearTimeout(debounceTimers[key]);
       }
+      
+      const timer = setTimeout(async () => {
+        try {
+          if (from1 || from2) {
+            const otherTeamId = from1 ? team1?.id : team2?.id;
+            if (otherTeamId) {
+              await fetch(`/api/teams/${otherTeamId}/assignments?participantId=${participantId}`, { method: 'DELETE' });
+            }
+          }
+          await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
+        } catch (error) {
+          console.error('Assignment failed:', error);
+        }
+      }, 300); // 300ms debounce
+      
+      setDebounceTimers(prev => ({ ...prev, [key]: timer }));
     }
   };
 
@@ -369,7 +378,14 @@ export default function TeamsPage() {
       const p = pos.find(x=>x.participantId===pid);
       if (p) return { x: p.x, y: p.y };
       const preset = positionsForFormation(team.formation);
-      if (idx < preset.length) return preset[idx];
+      if (idx < preset.length) {
+        const basePos = preset[idx];
+        // Team 2 gets inverted field (goal bottom, midfield top)
+        if (team.index === 2) {
+          return { x: basePos.x, y: 1 - basePos.y };
+        }
+        return basePos;
+      }
       const k = idx - preset.length; const row = k % 4; const col = Math.floor(k/4);
       return { x: Math.min(0.95, 0.65 + col*0.1), y: 0.2 + row*0.2 };
     };
@@ -403,18 +419,38 @@ export default function TeamsPage() {
       }
     };
 
+    const isTeam2 = team.index === 2;
+
     return (
       <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative w-full h-48 bg-green-700 rounded overflow-hidden border-2 border-gray-300">
         {/* Main field boundary */}
         <div className="absolute inset-2 border-2 border-white rounded-sm" />
-        {/* Goal area (top) */}
-        <div className="absolute top-2 left-[15%] w-[70%] h-[28%] border-2 border-white" />
-        {/* 6-yard box (top) */}
-        <div className="absolute top-2 left-[35%] w-[30%] h-[12%] border-2 border-white" />
-        {/* Penalty spot */}
-        <div className="absolute w-1.5 h-1.5 bg-white rounded-full" style={{ left: '50%', top: '18%', transform: 'translateX(-50%)' }} />
-        {/* Center circle */}
-        <div className="absolute left-1/2 -translate-x-1/2 -bottom-8 w-20 h-20 border-2 border-white rounded-full" />
+        
+        {isTeam2 ? (
+          /* Team 2: Goal bottom, midfield top */
+          <>
+            {/* Goal area (bottom) */}
+            <div className="absolute bottom-2 left-[15%] w-[70%] h-[28%] border-2 border-white" />
+            {/* 6-yard box (bottom) */}
+            <div className="absolute bottom-2 left-[35%] w-[30%] h-[12%] border-2 border-white" />
+            {/* Penalty spot */}
+            <div className="absolute w-1.5 h-1.5 bg-white rounded-full" style={{ left: '50%', bottom: '18%', transform: 'translateX(-50%)' }} />
+            {/* Center circle */}
+            <div className="absolute left-1/2 -translate-x-1/2 -top-8 w-20 h-20 border-2 border-white rounded-full" />
+          </>
+        ) : (
+          /* Team 1: Goal top, midfield bottom */
+          <>
+            {/* Goal area (top) */}
+            <div className="absolute top-2 left-[15%] w-[70%] h-[28%] border-2 border-white" />
+            {/* 6-yard box (top) */}
+            <div className="absolute top-2 left-[35%] w-[30%] h-[12%] border-2 border-white" />
+            {/* Penalty spot */}
+            <div className="absolute w-1.5 h-1.5 bg-white rounded-full" style={{ left: '50%', top: '18%', transform: 'translateX(-50%)' }} />
+            {/* Center circle */}
+            <div className="absolute left-1/2 -translate-x-1/2 -bottom-8 w-20 h-20 border-2 border-white rounded-full" />
+          </>
+        )}
 
         {asgn.map((a, i)=>{
           const posi = tokenPos(i, a.participantId);
@@ -473,7 +509,73 @@ export default function TeamsPage() {
       <p className="text-sm text-gray-500">Assign players via → buttons or use Auto-balance. Only the creator can change teams and positions.</p>
       {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
-            {/* Teams Layout: Left (Team Boxes Stacked), Right (Fields Stacked) */}
+      {/* Players Section - Top */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="border rounded p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-medium">Players</h3>
+            <button onClick={async()=>{ if (!eventData) return; const count = participants.filter(p=>p.isGuest).length + 1; const defaultName = `Guest ${count}`; await addGuest(defaultName); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
+          </div>
+          <ul className="space-y-2">
+            {participants.map((p)=> (
+              <li key={p.id} className="py-2 flex justify-between items-center">
+                <span className="flex items-center gap-1">
+                  <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center cursor-pointer" 
+                       title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}
+                       onClick={() => showPlayerCard(p)}>
+                    {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
+                  </div>
+                  {p.isGuest ? (
+                    <input className="text-sm bg-transparent border-b border-dashed focus:outline-none" defaultValue={p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p)+1}`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); }} />
+                  ) : (
+                    <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>{p.user?.displayName || p.user?.handle}</span>
+                  )}
+                  {!p.isGuest && <MVPBadge p={p} />}
+                </span>
+                <div className="flex gap-2">
+                    {(() => { 
+                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                      const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
+                      const teamName = team1?.name || 'Team 1';
+                      return <button 
+                        onClick={()=>assign(1,p.id)} 
+                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam2 ? 0.5 : 1 }}
+                        disabled={inTeam1}
+                      >
+                        {teamName}
+                      </button>; 
+                    })()}
+                    {(() => { 
+                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                      const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
+                      const teamName = team2?.name || 'Team 2';
+                      return <button 
+                        onClick={()=>assign(2,p.id)} 
+                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam1 ? 0.5 : 1 }}
+                        disabled={inTeam2}
+                      >
+                        {teamName}
+                      </button>; 
+                    })()}
+                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <TeamBalance eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
+            <button onClick={async()=>{ if (!eventData) return; await fetch(`/api/events/${eventData.id}/snapshot`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ note: 'manual-save' }) }); alert('Saved'); }} className="border px-3 py-2 rounded">Save</button>
+          </div>
+        </div>
+      </section>
+
+      {/* Teams Layout: Left (Team Boxes Stacked), Right (Fields Stacked) */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column: Team Boxes Stacked */}
         <div className="space-y-6">
@@ -551,71 +653,6 @@ export default function TeamsPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="border rounded p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-medium">Players</h3>
-            <button onClick={async()=>{ if (!eventData) return; const count = participants.filter(p=>p.isGuest).length + 1; const defaultName = `Guest ${count}`; await addGuest(defaultName); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
-          </div>
-          <ul className="space-y-2">
-            {participants.map((p)=> (
-              <li key={p.id} className="py-2 flex justify-between items-center">
-                <span className="flex items-center gap-1">
-                  <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center cursor-pointer" 
-                       title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}
-                       onClick={() => showPlayerCard(p)}>
-                    {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
-                  </div>
-                  {p.isGuest ? (
-                    <input className="text-sm bg-transparent border-b border-dashed focus:outline-none" defaultValue={p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p)+1}`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); }} />
-                  ) : (
-                    <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>{p.user?.displayName || p.user?.handle}</span>
-                  )}
-                  {!p.isGuest && <MVPBadge p={p} />}
-                </span>
-                <div className="flex gap-2">
-                    {(() => { 
-                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = team1?.color || '#dc2626'; 
-                      const teamName = team1?.name || 'Team 1';
-                      return <button 
-                        onClick={()=>assign(1,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam2 ? 0.5 : 1 }}
-                        disabled={inTeam1}
-                      >
-                        {teamName}
-                      </button>; 
-                    })()}
-                    {(() => { 
-                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = team2?.color || '#f59e0b'; 
-                      const teamName = team2?.name || 'Team 2';
-                      return <button 
-                        onClick={()=>assign(2,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam1 ? 0.5 : 1 }}
-                        disabled={inTeam2}
-                      >
-                        {teamName}
-                      </button>; 
-                    })()}
-                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <TeamBalance eventId={eventData.id} rosterLocked={Boolean(eventData.rosterLocked)} isOwner={isOwner} />
-            <button onClick={async()=>{ if (!eventData) return; await fetch(`/api/events/${eventData.id}/snapshot`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ note: 'manual-save' }) }); alert('Saved'); }} className="border px-3 py-2 rounded">Save</button>
-          </div>
-        </div>
-      </section>
-      
       {/* Modern Player Card Modal */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
@@ -644,7 +681,7 @@ export default function TeamsPage() {
                       <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd" />
                     </svg>
                     Owner
-                  </div>
+          </div>
                 )}
               </div>
             </div>
@@ -724,7 +761,7 @@ export default function TeamsPage() {
                       <span className="text-sm font-medium">Overall Rating:</span>
                       <span className="text-lg font-bold">
                         {Math.round(((playerCard.pace || 0) + (playerCard.shoot || 0) + (playerCard.pass || 0) + (playerCard.defend || 0)) / 4 * 10) / 10}
-                      </span>
+                </span>
                       <span className="text-sm">/5</span>
                     </div>
                   </div>
@@ -751,7 +788,7 @@ export default function TeamsPage() {
                   </div>
                 </div>
               )}
-            </div>
+        </div>
           </div>
         </div>
       )}
