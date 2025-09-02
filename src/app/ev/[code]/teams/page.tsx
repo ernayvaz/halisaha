@@ -317,33 +317,68 @@ export default function TeamsPage() {
     }
   }, [asgnTeam1.length, asgnTeam2.length, team1?.id, team2?.id]);
 
+  // Auto-update formations when team sizes change
+  useEffect(() => {
+    if (!isOwner || !eventData) return;
+    
+    const updateFormationIfNeeded = async (team: Team, currentSize: number) => {
+      const autoFormation = getAutoFormation(currentSize);
+      if (team.formation !== autoFormation) {
+        await upsertTeam(team.index as 1|2, { formation: autoFormation });
+      }
+    };
+
+    if (team1 && size1 > 0) {
+      updateFormationIfNeeded(team1, size1);
+    }
+    if (team2 && size2 > 0) {
+      updateFormationIfNeeded(team2, size2);
+    }
+  }, [size1, size2, team1?.id, team2?.id, isOwner, eventData?.id]);
+
+  const getAutoFormation = (playerCount: number): string => {
+    // Always goalkeeper first, then distribute symmetrically
+    if (playerCount <= 1) return '1-0-0-0'; // Just goalkeeper
+    if (playerCount === 2) return '1-1-0-0'; // Goalkeeper + 1 defender
+    if (playerCount === 3) return '1-1-1-0'; // Goalkeeper + 1 defender + 1 midfielder
+    if (playerCount === 4) return '1-1-1-1'; // Goalkeeper + 1 defender + 1 midfielder + 1 forward
+    if (playerCount === 5) return '1-2-1-1'; // Goalkeeper + 2 defenders + 1 midfielder + 1 forward
+    if (playerCount === 6) return '1-2-2-1'; // Goalkeeper + 2 defenders + 2 midfielders + 1 forward
+    if (playerCount === 7) return '1-2-2-2'; // Goalkeeper + 2 defenders + 2 midfielders + 2 forwards
+    if (playerCount === 8) return '1-3-2-2'; // Goalkeeper + 3 defenders + 2 midfielders + 2 forwards
+    if (playerCount === 9) return '1-3-3-2'; // Goalkeeper + 3 defenders + 3 midfielders + 2 forwards
+    if (playerCount === 10) return '1-3-3-3'; // Goalkeeper + 3 defenders + 3 midfielders + 3 forwards
+    // For 11+ players, keep adding in cycles: defender, midfielder, forward
+    const excess = playerCount - 10;
+    const base = [3, 3, 3]; // [defenders, midfielders, forwards]
+    for (let i = 0; i < excess; i++) {
+      base[i % 3]++; // Add to defender, midfielder, forward in cycle
+    }
+    return `1-${base[0]}-${base[1]}-${base[2]}`;
+  };
+
   const optionsForSize = (n: number) => {
-    const outfield = Math.max(0, n - 1);
-    const res: { v: string; label: string }[] = [];
-    const seen = new Set<string>();
-    for (let d=1; d<=outfield-2; d++) {
-      for (let m=1; m<=outfield-d-1; m++) {
-        const f = outfield - d - m;
-        if (f < 1) continue;
-        const tuples = [
-          [d,m,f], [d,f,m], [m,d,f], [m,f,d], [f,d,m], [f,m,d],
-        ];
-        for (const [x,y,z] of tuples) {
-          const key = `1-${x}-${y}-${z}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const labelPrefix = `${n}v${n}`;
-          res.push({ v: key, label: `${labelPrefix}: ${key}` });
+    const autoFormation = getAutoFormation(n);
+    const res: { v: string; label: string }[] = [
+      { v: autoFormation, label: `${autoFormation} (Auto)` }
+    ];
+    
+    // Add some manual options for flexibility
+    const seen = new Set<string>([autoFormation]);
+    
+    if (n === 2) {
+      if (!seen.has('2v2')) res.push({ v: '2v2', label: '2v2' });
+    } else if (n >= 3) {
+      // Add a few common formations as alternatives
+      const common = ['1-2-2-1', '1-1-2-1', '1-2-1-1'];
+      for (const formation of common) {
+        if (!seen.has(formation)) {
+          seen.add(formation);
+          res.push({ v: formation, label: formation });
         }
       }
     }
-    res.sort((a,b)=>{
-      const pa = a.v.split('-').map(Number); const pb = b.v.split('-').map(Number);
-      if (pa[1]!==pb[1]) return pa[1]-pb[1];
-      if (pa[2]!==pb[2]) return pa[2]-pb[2];
-      return pa[3]-pb[3];
-    });
-    if (res.length===0) res.push({ v: '1-1-1-1', label: `${n}v${n}` });
+    
     return res;
   };
 
@@ -489,14 +524,24 @@ export default function TeamsPage() {
   const addGuest = async (name: string) => {
     if (!eventData || !name) return;
     
+    // Optimistic update - add guest immediately to UI
+    const tempGuest: Participant = {
+      id: `temp-guest-${Date.now()}`,
+      isGuest: true,
+      guestName: name,
+      user: undefined
+    };
+    setParticipants(prev => [...prev, tempGuest]);
+    
     try {
       const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
       if (!r.ok) throw new Error('guest add failed');
       
-      // Let realtime events handle the UI update automatically
-      // No manual refresh needed as realtime will trigger update
+      // Realtime events will replace the temp guest with the real one
     } catch (error) {
       console.error('Failed to add guest:', error);
+      // Remove temp guest on error
+      setParticipants(prev => prev.filter(p => p.id !== tempGuest.id));
     }
   };
 

@@ -68,22 +68,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     },
   });
 
-  // Auto-assign: create teams if missing, then put participant into the team with fewer members (tie -> random)
-  const [team1, team2] = await Promise.all([
+  // Create teams if missing (but don't auto-assign participant)
+  await Promise.all([
     prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Team 1', color: getTeamColor(1) } }),
     prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Team 2', color: getTeamColor(2) } })
   ]);
-  const [c1, c2] = await Promise.all([
-    prisma.assignment.count({ where: { teamId: team1.id } }),
-    prisma.assignment.count({ where: { teamId: team2.id } }),
-  ]);
-  let targetTeamId = team1.id;
-  if (c2 < c1) targetTeamId = team2.id;
-  else if (c1 === c2) targetTeamId = Math.random() < 0.5 ? team1.id : team2.id;
-  await prisma.assignment.upsert({ where: { teamId_participantId: { teamId: targetTeamId, participantId: participant.id } }, update: {}, create: { teamId: targetTeamId, participantId: participant.id } });
 
+  // Only notify about participant update (no team assignment)
   await publish({ type: 'participants_updated', eventId: id });
-  await publish({ type: 'assignments_updated', teamId: targetTeamId });
   await publish({ type: 'teams_updated', eventId: id });
 
   return NextResponse.json(participant, { status: 201 });
