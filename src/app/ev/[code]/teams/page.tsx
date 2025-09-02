@@ -35,16 +35,23 @@ export default function TeamsPage() {
     setSelectedPlayer(participant);
     setPlayerCard(null);
     
-    if (!participant.isGuest && participant.user?.id) {
-      try {
+    try {
+      if (participant.isGuest) {
+        // Use participant card API for guests (returns default stats)
+        const response = await fetch(`/api/participants/${participant.id}/card`);
+        if (response.ok) {
+          const card = await response.json();
+          setPlayerCard(card);
+        }
+      } else if (participant.user?.id) {
         const response = await fetch(`/api/users/${participant.user.id}/card`);
         if (response.ok) {
           const card = await response.json();
           setPlayerCard(card);
         }
-      } catch (error) {
-        console.error('Failed to load player card:', error);
       }
+    } catch (error) {
+      console.error('Failed to load player card:', error);
     }
   };
 
@@ -526,7 +533,7 @@ export default function TeamsPage() {
                     {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
                   </div>
                   {p.isGuest ? (
-                    <input className="text-sm bg-transparent border-b border-dashed focus:outline-none" defaultValue={p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p)+1}`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); }} />
+                    <input className="text-sm bg-transparent focus:outline-none border rounded px-1" defaultValue={p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p)+1}`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); }} />
                   ) : (
                     <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>{p.user?.displayName || p.user?.handle}</span>
                   )}
@@ -536,13 +543,13 @@ export default function TeamsPage() {
                     {(() => { 
                       const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
                       const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
+                      const isSelected = inTeam1;
+                      const c = isSelected ? (team1?.color || '#dc2626') : '#000000'; 
                       const teamName = team1?.name || 'Team 1';
                       return <button 
                         onClick={()=>assign(1,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam2 ? 0.5 : 1 }}
-                        disabled={inTeam1}
+                        className={`text-xs border rounded px-2 py-1 font-medium ${isSelected ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        style={{ backgroundColor: c, color: textColorFor(c) }}
                       >
                         {teamName}
                       </button>; 
@@ -550,13 +557,13 @@ export default function TeamsPage() {
                     {(() => { 
                       const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
                       const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
+                      const isSelected = inTeam2;
+                      const c = isSelected ? (team2?.color || '#f59e0b') : '#000000'; 
                       const teamName = team2?.name || 'Team 2';
                       return <button 
                         onClick={()=>assign(2,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c), opacity: inTeam1 ? 0.5 : 1 }}
-                        disabled={inTeam2}
+                        className={`text-xs border rounded px-2 py-1 font-medium ${isSelected ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        style={{ backgroundColor: c, color: textColorFor(c) }}
                       >
                         {teamName}
                       </button>; 
@@ -580,7 +587,7 @@ export default function TeamsPage() {
         {/* Left Column: Team Boxes Stacked */}
         <div className="space-y-6">
           {/* Team 1 Box */}
-          <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 h-48">
             {/* Team 1 Left: Settings */}
           <div className="space-y-3">
               <div className="flex items-center gap-2">
@@ -612,7 +619,7 @@ export default function TeamsPage() {
         </div>
 
           {/* Team 2 Box */}
-          <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 h-48">
             {/* Team 2 Left: Settings */}
           <div className="space-y-3">
               <div className="flex items-center gap-2">
@@ -688,16 +695,7 @@ export default function TeamsPage() {
 
             {/* Content */}
             <div className="p-6">
-              {selectedPlayer.isGuest ? (
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-500 text-sm">Guest player - no stats available</p>
-                </div>
-              ) : playerCard ? (
+              {playerCard ? (
                 <div className="space-y-6">
                   {/* Stats Grid */}
                   <div className="grid grid-cols-2 gap-4">
