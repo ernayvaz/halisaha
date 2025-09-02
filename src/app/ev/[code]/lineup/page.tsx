@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { subscribe, type RealtimeEvent } from '@/lib/realtime';
 import { toPng } from 'html-to-image';
+import MatchInfo from '@/components/MatchInfo';
 
 type Team = { id: string; index: 1|2; name: string; color: string };
 type Assignment = { id: string; teamId: string; participantId: string; participant: { isGuest: boolean; guestName: string|null; user?: { displayName: string; handle: string } } };
@@ -169,6 +170,7 @@ export default function LineupPage() {
 
   return (
     <main className="p-6 max-w-4xl mx-auto space-y-4">
+      <MatchInfo eventCode={params.code} title="Lineup" />
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
           <button onClick={()=>setSelectedTeamIdx(1)} className={`px-3 py-1 rounded border ${selectedTeamIdx===1?'bg-gray-100':''}`}>Team 1</button>

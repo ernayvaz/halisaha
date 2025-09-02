@@ -68,12 +68,10 @@ export default function RootLayout({
         <meta name="theme-color" content="#16a34a" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <header className="fixed top-2 right-2 z-40 flex items-center gap-2">
+        {children}
+        <div className="fixed bottom-2 left-2 z-40">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/api/qrcode?text=%2F" alt="QR" width={64} height={64} className="border rounded bg-white shadow" />
-        </header>
-        <div className="pt-20">
-          {children}
+          <img src="/api/qrcode?text=%2F" alt="QR" width={48} height={48} className="border rounded bg-white shadow opacity-80 hover:opacity-100 transition-opacity" />
         </div>
         <ProfileButton />
         <ServiceWorkerRegister />
