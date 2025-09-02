@@ -521,27 +521,16 @@ export default function TeamsPage() {
     );
   };
 
-  const addGuest = async (name: string) => {
-    if (!eventData || !name) return;
-    
-    // Optimistic update - add guest immediately to UI
-    const tempGuest: Participant = {
-      id: `temp-guest-${Date.now()}`,
-      isGuest: true,
-      guestName: name,
-      user: undefined
-    };
-    setParticipants(prev => [...prev, tempGuest]);
-    
+  const addGuest = async () => {
+    if (!eventData) return;
     try {
-      const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
+      const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join' }) });
       if (!r.ok) throw new Error('guest add failed');
-      
-      // Realtime events will replace the temp guest with the real one
+      // Immediately refresh to avoid flicker / race
+      const plist = await fetch(`/api/events/${eventData.id}/participants`).then((r)=>r.json());
+      setParticipants(plist);
     } catch (error) {
       console.error('Failed to add guest:', error);
-      // Remove temp guest on error
-      setParticipants(prev => prev.filter(p => p.id !== tempGuest.id));
     }
   };
 
@@ -564,7 +553,7 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            <button onClick={async()=>{ if (!eventData) return; const count = participants.filter(p=>p.isGuest).length + 1; const defaultName = `Guest ${count}`; await addGuest(defaultName); }} className="text-xs border rounded px-2 py-1">+1 Guest</button>
+            <button onClick={addGuest} className="text-xs border rounded px-2 py-1">+1 Guest</button>
           </div>
           <ul className="space-y-2">
             {participants.map((p)=> (

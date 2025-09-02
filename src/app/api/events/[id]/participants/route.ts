@@ -43,9 +43,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
   }
 
-  if (!userId && !guestName) {
-    return NextResponse.json({ error: 'userId or guestName required' }, { status: 400 });
-  }
+  // For guests, guestName is optional – we'll generate a unique sequential name server-side
+  // Only error if neither userId nor guest intent is provided (mode enforces join semantics)
 
   if (userId) {
     const exists = await prisma.participant.findFirst({ where: { eventId: id, userId } });
@@ -58,11 +57,41 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   });
   const role = existingOwner ? 'player' : 'owner';
 
+  // Compute final guest name if creating a guest
+  let finalGuestName: string | null = null;
+  if (!userId) {
+    // Generate unique sequential Guest N within this event
+    const existing = await prisma.participant.findMany({
+      where: { eventId: id, isGuest: true },
+      select: { guestName: true },
+    });
+    const taken = new Set<string>(
+      (existing.map((e) => e.guestName || '').filter(Boolean)) as string[]
+    );
+    // Extract max N from names shaped like "Guest N"
+    let maxN = 0;
+    for (const name of taken) {
+      const m = /^Guest\s+(\d+)$/.exec(name);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n)) maxN = Math.max(maxN, n);
+      }
+    }
+    // Start from maxN+1 and ensure uniqueness
+    let candidate = maxN + 1;
+    let name = `Guest ${candidate}`;
+    while (taken.has(name)) {
+      candidate += 1;
+      name = `Guest ${candidate}`;
+    }
+    finalGuestName = name;
+  }
+
   const participant = await prisma.participant.create({
     data: {
       eventId: id,
       userId: userId || null,
-      guestName: userId ? null : guestName || null,
+      guestName: userId ? null : (finalGuestName || guestName || null),
       isGuest: !userId,
       role,
     },
