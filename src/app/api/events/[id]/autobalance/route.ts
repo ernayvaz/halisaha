@@ -6,8 +6,20 @@ import { cookies } from 'next/headers';
 
 type Method = 'snake' | 'greedy';
 
+function num(n: number | null | undefined, fallback = 3): number { return typeof n === 'number' && Number.isFinite(n) ? n : fallback; }
 function scoreOf(u: { pace?: number | null; shoot?: number | null; pass?: number | null; defend?: number | null }) {
-  return (u.pace ?? 3) + (u.shoot ?? 3) + (u.pass ?? 3) + (u.defend ?? 3);
+  return num(u.pace) + num(u.shoot) + num(u.pass) + num(u.defend);
+}
+
+// Position scoring per requirement:
+// - For forward (F): base by shoot; tiebreaker by avg of other 3
+// - For midfield (M): base by pass; tiebreaker by avg of other 3
+// - For defense (D): base by defend; tiebreaker by avg of other 3
+function positionScore(u: { pace?: number | null; shoot?: number | null; pass?: number | null; defend?: number | null }, pos: 'F'|'M'|'D'): number {
+  const pace = num(u.pace), shoot = num(u.shoot), pass = num(u.pass), defend = num(u.defend);
+  if (pos === 'F') return shoot + (pace + pass + defend) / 3;
+  if (pos === 'M') return pass + (pace + shoot + defend) / 3;
+  return defend + (pace + shoot + pass) / 3;
 }
 
 async function ensureOwner(eventId: string) {
@@ -53,6 +65,20 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   const a: string[] = [];
   const b: string[] = [];
+  // Derive recommended roles for each participant based on their stats
+  const roleFor: Record<string,'F'|'M'|'D'> = {};
+  for (const p of participants) {
+    const u = p.user || {} as any;
+    const f = positionScore(u, 'F');
+    const m = positionScore(u, 'M');
+    const d = positionScore(u, 'D');
+    const max = Math.max(f, m, d);
+    const picks: Array<'F'|'M'|'D'> = [];
+    if (Math.abs(f-max) < 1e-9) picks.push('F');
+    if (Math.abs(m-max) < 1e-9) picks.push('M');
+    if (Math.abs(d-max) < 1e-9) picks.push('D');
+    roleFor[p.id] = picks[Math.floor(Math.random()*picks.length)];
+  }
 
   if (method === 'snake') {
     let toA = true;
@@ -79,14 +105,39 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   }
 
   if (apply) {
+    // Assign players, then place them on the half-fields according to inferred role
+    const toCreatePositions = (teamId: string, ids: string[]) => {
+      // Simple laneing: D near own goal, M middle, F near attack
+      const lanes: Record<'D'|'M'|'F', number> = { D: 0.14, M: 0.56, F: 0.86 };
+      const byRole: Record<'D'|'M'|'F', string[]> = { D: [], M: [], F: [] };
+      for (const pid of ids) byRole[roleFor[pid] || 'M'].push(pid);
+      const rows: Array<'D'|'M'|'F'> = ['D','M','F'];
+      const positions: { teamId: string; participantId: string; x: number; y: number }[] = [];
+      for (const r of rows) {
+        const list = byRole[r];
+        const n = list.length;
+        for (let i=0;i<n;i++) {
+          const x = n===1 ? 0.5 : (0.2 + i*(0.6/(n-1)));
+          positions.push({ teamId, participantId: list[i], x, y: lanes[r] });
+        }
+      }
+      return positions;
+    };
+    const posA = toCreatePositions(team1.id, a);
+    const posB = toCreatePositions(team2.id, b);
+
     await prisma.$transaction([
       prisma.assignment.deleteMany({ where: { teamId: { in: [team1.id, team2.id] } } }),
       prisma.lineupPosition.deleteMany({ where: { teamId: { in: [team1.id, team2.id] } } }),
       prisma.assignment.createMany({ data: a.map((pid) => ({ teamId: team1.id, participantId: pid })) }),
       prisma.assignment.createMany({ data: b.map((pid) => ({ teamId: team2.id, participantId: pid })) }),
+      prisma.lineupPosition.createMany({ data: posA }),
+      prisma.lineupPosition.createMany({ data: posB }),
     ]);
     await publish({ type: 'assignments_updated', teamId: team1.id });
     await publish({ type: 'assignments_updated', teamId: team2.id });
+    await publish({ type: 'positions_updated', teamId: team1.id });
+    await publish({ type: 'positions_updated', teamId: team2.id });
   }
 
   const sum = (ids: string[]) => ids.reduce((s, pid) => {

@@ -38,6 +38,12 @@ export async function POST(req: NextRequest) {
     data: {
       handle,
       displayName: displayName || handle,
+      // Initialize neutral stats to avoid misleading defaults like 1
+      pace: 3,
+      shoot: 3,
+      pass: 3,
+      defend: 3,
+      foot: 'R',
     },
   });
 
