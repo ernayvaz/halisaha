@@ -133,7 +133,12 @@ export default function TeamsPage() {
     (async () => {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
       unsub = subscribe(e.id, (evt: RealtimeEvent)=>{
-        if (evt.type==='teams_updated' || evt.type==='assignments_updated' || evt.type==='flags_updated' || evt.type==='positions_updated' || evt.type==='participants_updated') {
+        if (evt.type==='participants_updated') {
+          // Lightweight refresh on participants change to avoid wiping local selections
+          fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()).then(setParticipants).catch(()=>{});
+          return;
+        }
+        if (evt.type==='teams_updated' || evt.type==='assignments_updated' || evt.type==='flags_updated' || evt.type==='positions_updated') {
           gateIfNeeded(code);
           Promise.all([
             fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()).then(setParticipants),
@@ -147,7 +152,7 @@ export default function TeamsPage() {
               await ensureFormationIfMissing(e.id, tlist, counts);
               await refreshTeamData(e.id, tlist);
             }),
-          ]);
+          ]).catch(()=>{});
         }
       });
     })();
@@ -462,7 +467,7 @@ export default function TeamsPage() {
     const isTeam2 = team.index === 2;
 
     return (
-      <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative w-full h-48 bg-green-700 rounded overflow-hidden border-2 border-gray-300">
+      <div ref={fieldRef} onPointerMove={onPointerMove} onPointerUp={onPointerUp} className="relative h-48 bg-green-700 rounded overflow-hidden border-2 border-gray-300" style={{ aspectRatio: '155 / 100' }}>
         {/* Main field boundary */}
         <div className="absolute inset-2 border-2 border-white rounded-sm" />
         
@@ -523,13 +528,21 @@ export default function TeamsPage() {
 
   const addGuest = async () => {
     if (!eventData) return;
+    // Optimistic UI: insert a temporary guest immediately
+    const nextIdx = (participants.filter(p=>p.isGuest).length || 0) + 1;
+    const tempId = `temp-guest-${Date.now()}`;
+    const temp: Participant = { id: tempId, isGuest: true, guestName: `Guest ${nextIdx}`, user: undefined as any };
+    setParticipants(prev => [...prev, temp]);
+
     try {
       const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join' }) });
       if (!r.ok) throw new Error('guest add failed');
-      // Immediately refresh to avoid flicker / race
-      const plist = await fetch(`/api/events/${eventData.id}/participants`).then((r)=>r.json());
-      setParticipants(plist);
+      const created = await r.json();
+      // Replace temp with created
+      setParticipants(prev => prev.map(p => p.id === tempId ? created : p));
     } catch (error) {
+      // Revert optimistic insert on failure
+      setParticipants(prev => prev.filter(p => p.id !== tempId));
       console.error('Failed to add guest:', error);
     }
   };
@@ -651,7 +664,7 @@ export default function TeamsPage() {
           </div>
           
           {/* Team 1 Field - matching height */}
-          <div className="h-48">
+          <div className="h-48" style={{ maxWidth: '100%', display: 'block' }}>
             <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
           </div>
         </div>
@@ -659,7 +672,7 @@ export default function TeamsPage() {
         {/* Bottom Row: Team 2 Field + Team 2 Box (same height) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Team 2 Field - matching height */}
-          <div className="h-48">
+          <div className="h-48" style={{ maxWidth: '100%', display: 'block' }}>
             <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
           </div>
           
