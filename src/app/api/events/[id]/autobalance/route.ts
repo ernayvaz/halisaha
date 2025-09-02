@@ -7,7 +7,7 @@ import { cookies } from 'next/headers';
 type Method = 'snake' | 'greedy';
 
 function scoreOf(u: { pace?: number | null; shoot?: number | null; pass?: number | null; defend?: number | null }) {
-  return (u.pace ?? 1) + (u.shoot ?? 1) + (u.pass ?? 1) + (u.defend ?? 1);
+  return (u.pace ?? 3) + (u.shoot ?? 3) + (u.pass ?? 3) + (u.defend ?? 3);
 }
 
 async function ensureOwner(eventId: string) {

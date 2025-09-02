@@ -35,23 +35,16 @@ export default function TeamsPage() {
     setSelectedPlayer(participant);
     setPlayerCard(null);
     
-    try {
-      if (participant.isGuest) {
-        // Use participant card API for guests (returns default stats)
-        const response = await fetch(`/api/participants/${participant.id}/card`);
-        if (response.ok) {
-          const card = await response.json();
-          setPlayerCard(card);
-        }
-      } else if (participant.user?.id) {
+    if (!participant.isGuest && participant.user?.id) {
+      try {
         const response = await fetch(`/api/users/${participant.user.id}/card`);
         if (response.ok) {
           const card = await response.json();
           setPlayerCard(card);
         }
+      } catch (error) {
+        console.error('Failed to load player card:', error);
       }
-    } catch (error) {
-      console.error('Failed to load player card:', error);
     }
   };
 
@@ -250,13 +243,7 @@ export default function TeamsPage() {
       if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
       }
     
-    // Update counts immediately
-      const t1 = team1; const t2 = team2;
-      if (t1 && t2) {
-      const c1 = idx === 1 ? asgnTeam1.length + 1 - (from1 ? 0 : 0) - (from2 ? 1 : 0) : asgnTeam1.length - (from1 ? 1 : 0);
-      const c2 = idx === 2 ? asgnTeam2.length + 1 - (from2 ? 0 : 0) - (from1 ? 1 : 0) : asgnTeam2.length - (from2 ? 1 : 0);
-      setAssignmentsByTeam({ ...(assignmentsByTeam||{}), [t1.id]: Math.max(0, c1), [t2.id]: Math.max(0, c2) });
-    }
+            // Counts will be updated by useEffect below
 
     if (isOwner) {
       // Debounced API call for owners
@@ -318,6 +305,17 @@ export default function TeamsPage() {
   const team2 = useMemo(()=>team(2), [teams]);
   const size1 = team1 ? (assignmentsByTeam[team1.id] || 0) : 0;
   const size2 = team2 ? (assignmentsByTeam[team2.id] || 0) : 0;
+
+  // Auto-update assignment counts when assignments change
+  useEffect(() => {
+    if (team1 && team2) {
+      setAssignmentsByTeam({
+        ...assignmentsByTeam,
+        [team1.id]: asgnTeam1.length,
+        [team2.id]: asgnTeam2.length
+      });
+    }
+  }, [asgnTeam1.length, asgnTeam2.length, team1?.id, team2?.id]);
 
   const optionsForSize = (n: number) => {
     const outfield = Math.max(0, n - 1);
@@ -533,7 +531,7 @@ export default function TeamsPage() {
                     {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
                   </div>
                   {p.isGuest ? (
-                    <input className="text-sm bg-transparent focus:outline-none border rounded px-1" defaultValue={p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p)+1}`} onBlur={async(e)=>{ const val=e.target.value.trim(); if (!val) return; await fetch(`/api/participants/${p.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ guestName: val }) }); }} />
+                    <span className="text-sm">{p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p)+1}`}</span>
                   ) : (
                     <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>{p.user?.displayName || p.user?.handle}</span>
                   )}
@@ -543,13 +541,13 @@ export default function TeamsPage() {
                     {(() => { 
                       const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
                       const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const isSelected = inTeam1;
-                      const c = isSelected ? (team1?.color || '#dc2626') : '#000000'; 
+                      const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
                       const teamName = team1?.name || 'Team 1';
                       return <button 
                         onClick={()=>assign(1,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${isSelected ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
                         style={{ backgroundColor: c, color: textColorFor(c) }}
+                        disabled={inTeam1}
                       >
                         {teamName}
                       </button>; 
@@ -557,13 +555,13 @@ export default function TeamsPage() {
                     {(() => { 
                       const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
                       const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const isSelected = inTeam2;
-                      const c = isSelected ? (team2?.color || '#f59e0b') : '#000000'; 
+                      const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
                       const teamName = team2?.name || 'Team 2';
                       return <button 
                         onClick={()=>assign(2,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${isSelected ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
                         style={{ backgroundColor: c, color: textColorFor(c) }}
+                        disabled={inTeam2}
                       >
                         {teamName}
                       </button>; 
@@ -582,81 +580,85 @@ export default function TeamsPage() {
         </div>
       </section>
 
-      {/* Teams Layout: Left (Team Boxes Stacked), Right (Fields Stacked) */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: Team Boxes Stacked */}
-        <div className="space-y-6">
+      {/* Teams Layout: Aligned boxes and fields with matching heights */}
+      <section className="space-y-6">
+        {/* Top Row: Team 1 Box + Team 1 Field (same height) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Team 1 Box */}
           <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 h-48">
             {/* Team 1 Left: Settings */}
-          <div className="space-y-3">
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
-          <h2 className="font-medium">Team 1</h2>
+                <h2 className="font-medium">Team 1</h2>
                 <input disabled={!isOwner} type="color" defaultValue={team1?.color||'#dc2626'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); // forbid pitch-like dark green
                   if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#dc2626'; upsertTeam(1,{color:'#dc2626'}); } else { upsertTeam(1,{color:v}); } }} />
               </div>
-          <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
-          <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
-            {optionsForSize(size1).map(o=> (
-              <option key={o.v} value={o.v}>{o.label}</option>
-            ))}
-          </select>
-          <p className="text-[11px] text-gray-500">Players: {size1} • Allowed formations depend on team size.</p>
-          </div>
-            
+              <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
+              <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
+                {optionsForSize(size1).map(o=> (
+                  <option key={o.v} value={o.v}>{o.label}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-500">Players: {size1}</p>
+            </div>
+              
             {/* Team 1 Right: Roster */}
-          <div className="space-y-2">
-            <h3 className="font-medium">Team 1 Roster</h3>
+            <div className="space-y-2 overflow-y-auto">
+              <h3 className="font-medium">Team 1 Roster</h3>
               <ul className="space-y-1">
-              {asgnTeam1.map(a=> (
-                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                </li>
-              ))}
-            </ul>
+                {asgnTeam1.map(a=> (
+                  <li key={a.id} className="py-1 text-xs flex justify-between items-center">
+                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                    <button className="text-xs border rounded px-1 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>×</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          
+          {/* Team 1 Field - matching height */}
+          <div className="h-48">
+            <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
           </div>
         </div>
 
+        {/* Bottom Row: Team 2 Field + Team 2 Box (same height) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Team 2 Field - matching height */}
+          <div className="h-48">
+            <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
+          </div>
+          
           {/* Team 2 Box */}
           <div className="border rounded p-3 grid grid-cols-1 md:grid-cols-2 gap-4 h-48">
             {/* Team 2 Left: Settings */}
-          <div className="space-y-3">
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
-          <h2 className="font-medium">Team 2</h2>
+                <h2 className="font-medium">Team 2</h2>
                 <input disabled={!isOwner} type="color" defaultValue={team2?.color||'#f59e0b'} onChange={(e)=>{ const v=e.target.value.toLowerCase(); if (['#166534','#14532d','#065f46','#064e3b'].includes(v)) { e.target.value = '#f59e0b'; upsertTeam(2,{color:'#f59e0b'}); } else { upsertTeam(2,{color:v}); } }} />
               </div>
-          <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
-          <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
-            {optionsForSize(size2).map(o=> (
-              <option key={o.v} value={o.v}>{o.label}</option>
-            ))}
-          </select>
-          <p className="text-[11px] text-gray-500">Players: {size2} • Allowed formations depend on team size.</p>
-          </div>
-            
+              <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
+              <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
+                {optionsForSize(size2).map(o=> (
+                  <option key={o.v} value={o.v}>{o.label}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-500">Players: {size2}</p>
+            </div>
+              
             {/* Team 2 Right: Roster */}
-          <div className="space-y-2">
-            <h3 className="font-medium">Team 2 Roster</h3>
+            <div className="space-y-2 overflow-y-auto">
+              <h3 className="font-medium">Team 2 Roster</h3>
               <ul className="space-y-1">
-              {asgnTeam2.map(a=> (
-                <li key={a.id} className="py-1 text-sm flex justify-between items-center">
-                  <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                  <button className="text-xs border rounded px-2 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>Remove</button>
-                </li>
-              ))}
-            </ul>
+                {asgnTeam2.map(a=> (
+                  <li key={a.id} className="py-1 text-xs flex justify-between items-center">
+                    <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
+                    <button className="text-xs border rounded px-1 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>×</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
-        </div>
-
-        {/* Right Column: Fields Stacked */}
-        <div className="space-y-6">
-          {/* Team 1 Field */}
-          <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
-          
-          {/* Team 2 Field */}
-        <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
         </div>
       </section>
 
@@ -695,7 +697,73 @@ export default function TeamsPage() {
 
             {/* Content */}
             <div className="p-6">
-              {playerCard ? (
+                             {selectedPlayer.isGuest ? (
+                 <div className="space-y-6">
+                   {/* Guest Stats Grid */}
+                   <div className="grid grid-cols-2 gap-4">
+                     {/* Pace */}
+                     <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-red-700 font-medium mb-1">Pace</p>
+                       <p className="text-2xl font-bold text-red-800">3</p>
+                     </div>
+                     
+                     {/* Shoot */}
+                     <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 3v10a2 2 0 002 2h6a2 2 0 002-2V7H7z" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-orange-700 font-medium mb-1">Shoot</p>
+                       <p className="text-2xl font-bold text-orange-800">3</p>
+                     </div>
+                     
+                     {/* Pass */}
+                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-blue-700 font-medium mb-1">Pass</p>
+                       <p className="text-2xl font-bold text-blue-800">3</p>
+                     </div>
+                     
+                     {/* Defend */}
+                     <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.031 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-green-700 font-medium mb-1">Defend</p>
+                       <p className="text-2xl font-bold text-green-800">3</p>
+                     </div>
+                   </div>
+                   
+                   {/* Overall Rating */}
+                   <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-4 text-white text-center">
+                     <p className="text-sm opacity-90 mb-1">Overall Rating</p>
+                     <p className="text-3xl font-bold">12</p>
+                   </div>
+                   
+                   {/* Preferred Foot */}
+                   <div className="bg-gray-50 rounded-xl p-4 text-center">
+                     <div className="flex items-center justify-center mb-2">
+                       <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                       </svg>
+                     </div>
+                     <p className="text-sm text-gray-600 font-medium mb-1">Preferred Foot</p>
+                     <p className="text-lg font-semibold text-gray-800">Right</p>
+                   </div>
+                 </div>
+               ) : playerCard ? (
                 <div className="space-y-6">
                   {/* Stats Grid */}
                   <div className="grid grid-cols-2 gap-4">
