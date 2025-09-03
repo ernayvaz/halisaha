@@ -7,12 +7,10 @@ import MatchInfo from '@/components/MatchInfo';
 
 
 type Event = { id: string; code: string; name?: string|null; rosterLocked?: boolean; lineupLocked?: boolean };
-type User = { id: string; handle: string; displayName: string; badges?: { level: number; count: number; type: string }[] };
-type Participant = { id: string; isGuest: boolean; guestName: string|null; user?: User; role?: string };
+type Participant = { id: string; isGuest: boolean; guestName: string|null; user?: { id: string; handle: string; displayName: string } };
 type Team = { id: string; eventId: string; index: 1|2; name: string; color: string; formation: string };
 type Assignment = { id: string; teamId: string; participantId: string; participant: Participant };
 type Position = { id: string; teamId: string; participantId: string; x: number; y: number };
-type PlayerCard = { pace: number; shoot: number; pass: number; defend: number; foot: 'L' | 'R' };
 
 export default function TeamsPage() {
   const params = useParams<{ code: string }>();
@@ -28,63 +26,36 @@ export default function TeamsPage() {
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
   const [addingGuest, setAddingGuest] = useState(false);
-  const [loadingPlayerCard, setLoadingPlayerCard] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [optimisticUpdate, setOptimisticUpdate] = useState<number | null>(null);
+  const [optimisticUpdate, setOptimisticUpdate] = useState<any>(null);
   const [lastGuestAddedAt, setLastGuestAddedAt] = useState<number>(0);
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
-  const [playerCard, setPlayerCard] = useState<PlayerCard | null>(null);
+  const [playerCard, setPlayerCard] = useState<any>(null);
   const [debounceTimers, setDebounceTimers] = useState<Record<string, NodeJS.Timeout>>({});
+  const eventUnsubRef = useRef<() => void>(() => {});
+  const teamUnsubsRef = useRef<Record<string, () => void>>({});
 
   const showPlayerCard = async (participant: Participant) => {
     setSelectedPlayer(participant);
     setPlayerCard(null);
-    setError(null);
     
     if (!participant.isGuest && participant.user?.id) {
-      setLoadingPlayerCard(true);
       try {
         const response = await fetch(`/api/users/${participant.user.id}/card`);
         if (response.ok) {
           const card = await response.json();
           setPlayerCard(card);
-        } else {
-          setError('Failed to load player stats');
         }
       } catch (error) {
         console.error('Failed to load player card:', error);
-        setError('Network error while loading player stats');
-      } finally {
-        setLoadingPlayerCard(false);
       }
     }
   };
 
   function positionsForFormation(formation: string): { x:number; y:number }[] {
-    // Handle edge cases and invalid formations
-    if (!formation || typeof formation !== 'string') {
-      return [{ x: 0.5, y: 0.14 }]; // Just goalkeeper
-    }
-    
-    // Handle special formations like '2v2'
-    if (formation === '2v2') {
-      return [
-        { x: 0.3, y: 0.2 }, // Left player
-        { x: 0.7, y: 0.2 }  // Right player
-      ];
-    }
-    
-    const parts = formation.split('-').map((n)=>parseInt(n,10)).filter(n => !isNaN(n) && n >= 0);
-    if (parts.length < 1) {
-      return [{ x: 0.5, y: 0.14 }]; // Fallback to just goalkeeper
-    }
-    
-    // Ensure we have at least goalkeeper
-    const goalkeeper = parts[0] || 1;
+    const parts = formation.split('-').map((n)=>parseInt(n,10));
     const a = parts[1]||0, b = parts[2]||0, c = parts[3]||0;
-    
     // Rotated: y positions for vertical layout (goal top, midfield bottom)
     const ys = [0.28, 0.56, 0.86];
     const spread = (count: number): number[] => {
@@ -95,12 +66,8 @@ export default function TeamsPage() {
       return xs;
     };
     const out: {x:number;y:number}[] = [];
-    
-    // Goalkeeper(s) at top center - spread horizontally if multiple
-    const gkPositions = spread(goalkeeper);
-    gkPositions.forEach(x => out.push({ x, y: 0.14 }));
-    
-    // Add field players
+    // Goalkeeper at top center
+    out.push({ x: 0.5, y: 0.14 });
     [a,b,c].forEach((cnt, idx)=>{
       const xs = spread(cnt);
       xs.forEach((x)=>out.push({ x, y: ys[idx] }));
@@ -133,161 +100,105 @@ export default function TeamsPage() {
     if (!code) return;
     gateIfNeeded(code);
     const run = async () => {
-      try {
-        const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(async r => {
-          if (!r.ok) throw new Error(`Event not found: ${r.status}`);
-          return r.json();
-        });
-        setEventData(e);
-        
-        const [plist, initialTlist, me] = await Promise.all([
-          fetch(`/api/events/${e.id}/participants`).then(async r => {
-            if (!r.ok) throw new Error(`Failed to load participants: ${r.status}`);
-            return r.json();
-          }),
-          fetch(`/api/events/${e.id}/teams`).then(async r => {
-            if (!r.ok) throw new Error(`Failed to load teams: ${r.status}`);
-            return r.json();
-          }),
-          fetch('/api/me').then(r=>r.ok?r.json():null).catch(()=>null),
+      const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(r=>r.json());
+      setEventData(e);
+      const [plist, initialTlist, me] = await Promise.all([
+        fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()),
+        fetch(`/api/events/${e.id}/teams`).then((r)=>r.json()),
+        fetch('/api/me').then(r=>r.ok?r.json():null).catch(()=>null),
+      ]);
+      setParticipants(plist); 
+      
+      // Ensure teams exist immediately
+      let tlist = initialTlist;
+      if (tlist.length === 0) {
+        // Create default teams if none exist
+        const [t1, t2] = await Promise.all([
+          fetch(`/api/events/${e.id}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: 1, name: 'Team 1', color: '#dc2626' }) }).then(r=>r.json()),
+          fetch(`/api/events/${e.id}/teams`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: 2, name: 'Team 2', color: '#f59e0b' }) }).then(r=>r.json())
         ]);
-        setParticipants(plist); 
-        
-        // Ensure teams exist immediately
-        let tlist = initialTlist;
-        if (tlist.length === 0) {
-          // Create default teams if none exist
-          try {
-            const [t1, t2] = await Promise.all([
-              fetch(`/api/events/${e.id}/teams`, { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ index: 1, name: 'Team 1', color: '#dc2626' }) 
-              }).then(async r => {
-                if (!r.ok) throw new Error(`Failed to create team 1: ${r.status}`);
-                return r.json();
-              }),
-              fetch(`/api/events/${e.id}/teams`, { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ index: 2, name: 'Team 2', color: '#f59e0b' }) 
-              }).then(async r => {
-                if (!r.ok) throw new Error(`Failed to create team 2: ${r.status}`);
-                return r.json();
-              })
-            ]);
-            tlist = [t1, t2];
-          } catch (teamCreationError) {
-            console.error('Failed to create default teams:', teamCreationError);
-            setError('Failed to initialize teams');
-            return;
-          }
-        }
-        setTeams(tlist);
-        
-        if (me?.id) {
-          const mine = plist.find((p: Participant)=>p.user?.id === me.id);
-          setIsOwner(mine?.role === 'owner');
-        } else setIsOwner(false);
-        
-        try {
-          const counts = Object.fromEntries(await Promise.all(tlist.map(async (t: Team)=>{
-            const asg = await fetch(`/api/teams/${t.id}/assignments`).then(async r => {
-              if (!r.ok) throw new Error(`Failed to load assignments for team ${t.id}: ${r.status}`);
-              return r.json();
-            });
-            return [t.id, asg.length];
-          })));
-          setAssignmentsByTeam(counts);
-          await ensureFormationIfMissing(e.id, tlist, counts);
-          await refreshTeamData(e.id, tlist);
-        } catch (assignmentError) {
-          console.error('Failed to load team assignments:', assignmentError);
-          setError('Failed to load team data');
-        }
-      } catch (error) {
-        console.error('Failed to initialize teams page:', error);
-        setError('Failed to load event data');
+        tlist = [t1, t2];
       }
+      setTeams(tlist);
+      
+      if (me?.id) {
+        const mine = plist.find((p: Participant)=>p.user?.id === me.id);
+        setIsOwner(mine?.role === 'owner');
+      } else setIsOwner(false);
+      const counts = Object.fromEntries(await Promise.all(tlist.map(async (t: Team)=>{
+        const asg = await fetch(`/api/teams/${t.id}/assignments`).then(r=>r.json());
+        return [t.id, asg.length];
+      })));
+      setAssignmentsByTeam(counts);
+      await ensureFormationIfMissing(e.id, tlist, counts);
+      await refreshTeamData(e.id, tlist);
     };
     run();
-    let unsub = () => {};
+    // Event-level subscription (participants/teams/flags)
+    eventUnsubRef.current?.();
     (async () => {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
-      unsub = subscribe(e.id, (evt: RealtimeEvent) => {
+      eventUnsubRef.current = subscribe(e.id, (evt: RealtimeEvent) => {
         // Skip updates during optimistic windows to prevent assignment resets
         if (optimisticUpdate && Date.now() - optimisticUpdate < 1500) return;
         if (lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000) return;
         
         if (evt.type === 'participants_updated') {
-          fetch(`/api/events/${e.id}/participants`)
-            .then(r => r.ok ? r.json() : Promise.reject(`Failed to fetch participants: ${r.status}`))
-            .then(setParticipants)
-            .catch(err => console.error('Failed to update participants:', err));
+          fetch(`/api/events/${e.id}/participants`).then(r => r.json()).then(setParticipants).catch(() => {});
         } else if (evt.type === 'teams_updated') {
-          fetch(`/api/events/${e.id}/teams`)
-            .then(r => r.ok ? r.json() : Promise.reject(`Failed to fetch teams: ${r.status}`))
-            .then(setTeams)
-            .catch(err => console.error('Failed to update teams:', err));
+          (async () => {
+            const tlist = await fetch(`/api/events/${e.id}/teams`).then(r => r.json());
+            setTeams(tlist);
+            // Rewire team-level subscriptions on team changes
+            setupTeamSubscriptions(tlist);
+          })().catch(()=>{});
         } else if (evt.type === 'assignments_updated') {
-          // Only refresh if not in optimistic state - use debounce to prevent race conditions
-          const refreshKey = 'assignments_refresh';
-          if (debounceTimers[refreshKey]) {
-            clearTimeout(debounceTimers[refreshKey]);
-          }
-          
-          const timer = setTimeout(() => {
-            // Get current teams from state to avoid undefined references
-            const currentTeam1 = teams.find(t => t.index === 1);
-            const currentTeam2 = teams.find(t => t.index === 2);
-            if (currentTeam1?.id) {
-              fetch(`/api/teams/${currentTeam1.id}/assignments`)
-                .then(r => r.ok ? r.json() : Promise.reject(`Failed to fetch team 1 assignments: ${r.status}`))
-                .then(setAsgnTeam1)
-                .catch(err => console.error('Failed to update team 1 assignments:', err));
-            }
-            if (currentTeam2?.id) {
-              fetch(`/api/teams/${currentTeam2.id}/assignments`)
-                .then(r => r.ok ? r.json() : Promise.reject(`Failed to fetch team 2 assignments: ${r.status}`))
-                .then(setAsgnTeam2)
-                .catch(err => console.error('Failed to update team 2 assignments:', err));
-            }
-          }, optimisticUpdate && Date.now() - optimisticUpdate < 1500 ? 1500 : 100);
-          
-          setDebounceTimers(prev => ({ ...prev, [refreshKey]: timer }));
+          // handled by team-level subscriptions as well; keep as fallback
+          setTimeout(() => {
+            if (team1?.id) fetch(`/api/teams/${team1.id}/assignments`).then(r=>r.json()).then(setAsgnTeam1).catch(()=>{});
+            if (team2?.id) fetch(`/api/teams/${team2.id}/assignments`).then(r=>r.json()).then(setAsgnTeam2).catch(()=>{});
+          }, 100);
         } else if (evt.type === 'positions_updated') {
-          // Get current teams from state to avoid undefined references
-          const currentTeam1 = teams.find(t => t.index === 1);
-          const currentTeam2 = teams.find(t => t.index === 2);
-          if (currentTeam1?.id) {
-            fetch(`/api/teams/${currentTeam1.id}/positions`)
-              .then(r => r.ok ? r.json() : Promise.reject(`Failed to fetch team 1 positions: ${r.status}`))
-              .then(setPosTeam1)
-              .catch(err => console.error('Failed to update team 1 positions:', err));
-          }
-          if (currentTeam2?.id) {
-            fetch(`/api/teams/${currentTeam2.id}/positions`)
-              .then(r => r.ok ? r.json() : Promise.reject(`Failed to fetch team 2 positions: ${r.status}`))
-              .then(setPosTeam2)
-              .catch(err => console.error('Failed to update team 2 positions:', err));
-          }
+          if (team1?.id) fetch(`/api/teams/${team1.id}/positions`).then(r=>r.json()).then(setPosTeam1).catch(()=>{});
+          if (team2?.id) fetch(`/api/teams/${team2.id}/positions`).then(r=>r.json()).then(setPosTeam2).catch(()=>{});
         } else if (evt.type === 'flags_updated') {
-          fetch(`/api/events?code=${encodeURIComponent(code)}`)
-            .then(r => r.ok ? r.json() : Promise.reject(`Failed to fetch event flags: ${r.status}`))
-            .then(setEventData)
-            .catch(err => console.error('Failed to update event flags:', err));
+          fetch(`/api/events?code=${encodeURIComponent(code)}`).then(r=>r.json()).then(setEventData).catch(()=>{});
         }
       });
     })();
-    return () => unsub();
-  }, [params?.code, teams]);
-
-  // Clean up debounce timers on unmount
-  useEffect(() => {
     return () => {
-      Object.values(debounceTimers).forEach(timer => clearTimeout(timer));
+      try { eventUnsubRef.current?.(); } catch {}
+      // Teardown team subscriptions
+      const subs = teamUnsubsRef.current; teamUnsubsRef.current = {};
+      Object.values(subs).forEach((u)=>{ try { u(); } catch {} });
     };
-  }, [debounceTimers]);
+  }, [params?.code]);
+
+  const setupTeamSubscriptions = (tlist: Team[]) => {
+    // Unsubscribe from teams that are no longer present
+    const current = teamUnsubsRef.current;
+    const nextIds = new Set(tlist.map(t=>t.id));
+    for (const [tid, unsub] of Object.entries(current)) {
+      if (!nextIds.has(tid)) { try { unsub(); } catch {} delete current[tid]; }
+    }
+    // Subscribe to new teams
+    for (const t of tlist) {
+      if (!current[t.id]) {
+        current[t.id] = subscribe(t.id, (evt: RealtimeEvent) => {
+          if (evt.type === 'assignments_updated' && evt.teamId === t.id) {
+            fetch(`/api/teams/${t.id}/assignments`).then(r=>r.json()).then((list)=>{
+              if (t.index===1) setAsgnTeam1(list); else setAsgnTeam2(list);
+            }).catch(()=>{});
+          } else if (evt.type === 'positions_updated' && evt.teamId === t.id) {
+            fetch(`/api/teams/${t.id}/positions`).then(r=>r.json()).then((list)=>{
+              if (t.index===1) setPosTeam1(list); else setPosTeam2(list);
+            }).catch(()=>{});
+          }
+        });
+      }
+    }
+    teamUnsubsRef.current = current;
+  };
 
   const ensureFormationIfMissing = async (eventId: string, tlist: Team[], counts: Record<string, number>) => {
     for (const t of tlist) {
@@ -396,25 +307,9 @@ export default function TeamsPage() {
               await fetch(`/api/teams/${otherTeamId}/assignments?participantId=${participantId}`, { method: 'DELETE' });
             }
           }
-          const response = await fetch(`/api/teams/${t.id}/assignments`, { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ participantId }) 
-          });
-          
-          if (!response.ok) {
-            throw new Error(`Assignment failed: ${response.status}`);
-          }
+          await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
         } catch (error) {
           console.error('Assignment failed:', error);
-          // Revert optimistic update on error
-          if (idx === 1) {
-            setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
-            if (from2) setAsgnTeam2(prev => [...prev, from2]);
-          } else {
-            setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
-            if (from1) setAsgnTeam1(prev => [...prev, from1]);
-          }
         } finally {
           setTimeout(()=>setOptimisticUpdate(null), 500);
         }
@@ -488,13 +383,12 @@ export default function TeamsPage() {
     if (team2 && size2 > 0) {
       updateFormationIfNeeded(team2, size2);
     }
-  }, [size1, size2, team1?.id, team2?.id, team1?.formation, team2?.formation, isOwner, eventData?.id]);
+  }, [size1, size2, team1?.id, team2?.id, isOwner, eventData?.id]);
 
   const getAutoFormation = (playerCount: number): string => {
-    // Handle edge cases
-    if (playerCount <= 0) return '1-0-0-0'; // Default to just goalkeeper
-    if (playerCount === 1) return '1-0-0-0'; // Just goalkeeper
-    if (playerCount === 2) return '2v2'; // Special case for 2v2
+    // Always goalkeeper first, then distribute symmetrically
+    if (playerCount <= 1) return '1-0-0-0'; // Just goalkeeper
+    if (playerCount === 2) return '1-1-0-0'; // Goalkeeper + 1 defender
     if (playerCount === 3) return '1-1-1-0'; // Goalkeeper + 1 defender + 1 midfielder
     if (playerCount === 4) return '1-1-1-1'; // Goalkeeper + 1 defender + 1 midfielder + 1 forward
     if (playerCount === 5) return '1-2-1-1'; // Goalkeeper + 2 defenders + 1 midfielder + 1 forward
@@ -503,7 +397,6 @@ export default function TeamsPage() {
     if (playerCount === 8) return '1-3-2-2'; // Goalkeeper + 3 defenders + 2 midfielders + 2 forwards
     if (playerCount === 9) return '1-3-3-2'; // Goalkeeper + 3 defenders + 3 midfielders + 2 forwards
     if (playerCount === 10) return '1-3-3-3'; // Goalkeeper + 3 defenders + 3 midfielders + 3 forwards
-    
     // For 11+ players, keep adding in cycles: defender, midfielder, forward
     const excess = playerCount - 10;
     const base = [3, 3, 3]; // [defenders, midfielders, forwards]
@@ -522,9 +415,7 @@ export default function TeamsPage() {
     // Add some manual options for flexibility
     const seen = new Set<string>([autoFormation]);
     
-    if (n === 2) {
-      if (!seen.has('2v2')) res.push({ v: '2v2', label: '2v2' });
-    } else if (n >= 3) {
+    if (n >= 3) {
       // Add a few common formations as alternatives
       const common = ['1-2-2-1', '1-1-2-1', '1-2-1-1'];
       for (const formation of common) {
@@ -556,9 +447,9 @@ export default function TeamsPage() {
   };
 
   const MVPBadge = ({ p }: { p: Participant }) => {
-    const badge = p.user?.badges?.[0];
-    if (!badge) return null;
-    return <span title={`MVP Lv${badge.level}`} className="ml-1 text-[10px]">🏅</span>;
+    const b = (p.user as any)?.badges && (p.user as any).badges[0];
+    if (!b) return null;
+    return <span title={`MVP Lv${b.level}`} className="ml-1 text-[10px]">🏅</span>;
   };
 
   const HalfField = ({ team, asgn, pos, setPos }: { team?: Team; asgn: Assignment[]; pos: Position[]; setPos: Dispatch<SetStateAction<Position[]>> }) => {
@@ -574,8 +465,7 @@ export default function TeamsPage() {
     const tokenPos = (idx: number, pid: string) => {
       const p = pos.find(x=>x.participantId===pid);
       if (p) return { x: p.x, y: p.y };
-      
-      const preset = positionsForFormation(team.formation || '1-2-2-1');
+      const preset = positionsForFormation(team.formation);
       if (idx < preset.length) {
         const basePos = preset[idx];
         // Team 2 gets inverted field (goal bottom, midfield top)
@@ -584,14 +474,8 @@ export default function TeamsPage() {
         }
         return basePos;
       }
-      
-      // Fallback positioning for extra players beyond formation
-      const k = idx - preset.length; 
-      const row = k % 4; 
-      const col = Math.floor(k/4);
-      const x = Math.min(0.95, Math.max(0.05, 0.65 + col*0.1));
-      const y = Math.min(0.95, Math.max(0.05, 0.2 + row*0.2));
-      return { x, y };
+      const k = idx - preset.length; const row = k % 4; const col = Math.floor(k/4);
+      return { x: Math.min(0.95, 0.65 + col*0.1), y: 0.2 + row*0.2 };
     };
     const clamp = (v:number,min:number,max:number)=>Math.min(Math.max(v,min),max);
     const onPointerDown = (e: React.PointerEvent<HTMLDivElement>, pid: string) => {
@@ -619,27 +503,8 @@ export default function TeamsPage() {
       if (!posi) return;
       if (!eventData?.lineupLocked || isOwner) {
         if (isOwner) {
-          // Use debounce for position updates to prevent race conditions
-          const posKey = `position-${id}`;
-          if (debounceTimers[posKey]) {
-            clearTimeout(debounceTimers[posKey]);
-          }
-          
-          const timer = setTimeout(async () => {
-            try {
-              await fetch(`/api/teams/${team.id}/positions`, { 
-                method:'PATCH', 
-                headers:{'Content-Type':'application/json'}, 
-                body: JSON.stringify({ participantId:id, x: posi.x, y: posi.y }) 
-              });
-              const fresh = await fetch(`/api/teams/${team.id}/positions`).then(r=>r.json()); 
-              setPos(fresh);
-            } catch (error) {
-              console.error('Failed to update position:', error);
-            }
-          }, 200);
-          
-          setDebounceTimers(prev => ({ ...prev, [posKey]: timer }));
+        await fetch(`/api/teams/${team.id}/positions`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ participantId:id, x: posi.x, y: posi.y }) });
+        const fresh = await fetch(`/api/teams/${team.id}/positions`).then(r=>r.json()); setPos(fresh);
         }
         // For non-owners, just update local state for preview
       }
@@ -692,8 +557,8 @@ export default function TeamsPage() {
               <div className="relative cursor-pointer flex flex-col items-center">
               <div className="relative">
                 {bubble(label, team.color)}
-                {!part.isGuest && part.user?.badges && part.user.badges.length > 0 && (
-                  <span className="absolute -top-2 -right-2 text-[10px]">🏅</span>
+                {!part.isGuest && (
+                  <span className="absolute -top-2 -right-2 text-[10px]">{(part.user as any)?.badges?.length? '🏅':''}</span>
                 )}
                 </div>
                 <div className="text-[8px] text-white font-medium mt-1 max-w-[50px] truncate bg-black/70 rounded px-1 text-center">
@@ -715,6 +580,7 @@ export default function TeamsPage() {
     const tmpId = `tmp-${Date.now()}`;
     const tmpGuest: Participant = { id: tmpId, isGuest: true, guestName, user: undefined };
     setParticipants(prev => Array.isArray(prev) ? [...prev, tmpGuest] : [tmpGuest]);
+    setAddingGuest(true);
     // Call server to create guest
     (async () => {
     try {
@@ -723,26 +589,16 @@ export default function TeamsPage() {
         const created = await r.json();
         // Replace tmp guest with real record
         setParticipants(prev => prev.map(p => p.id === tmpId ? created : p));
+        setLastGuestAddedAt(Date.now());
       } catch (err) {
         console.error('Guest creation error', err);
         // Optionally remove tmp on error
         setParticipants(prev => prev.filter(p => p.id !== tmpId));
-      }
+      } finally { setAddingGuest(false); }
     })();
   };
 
-  if (!eventData) {
-    return (
-      <main className="p-6 max-w-4xl mx-auto">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading event data...</p>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
 
   return (
     <main className="p-6 max-w-4xl mx-auto space-y-6">
@@ -926,7 +782,7 @@ export default function TeamsPage() {
                 <h4 className="text-xl font-bold mb-1">
                   {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
                 </h4>
-                {selectedPlayer.role === 'owner' && (
+                {(selectedPlayer as any).role === 'owner' && (
                   <div className="inline-flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-medium">
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd" />
@@ -951,8 +807,7 @@ export default function TeamsPage() {
                          </svg>
                        </div>
                        <p className="text-xs text-red-700 font-medium mb-1">Pace</p>
-                       <p className="text-2xl font-bold text-red-800">-</p>
-                       <p className="text-xs text-red-600 opacity-70">Guest Player</p>
+                       <p className="text-2xl font-bold text-red-800">3</p>
                      </div>
                      
                      {/* Shoot */}
@@ -963,8 +818,7 @@ export default function TeamsPage() {
                          </svg>
                        </div>
                        <p className="text-xs text-orange-700 font-medium mb-1">Shoot</p>
-                       <p className="text-2xl font-bold text-orange-800">-</p>
-                       <p className="text-xs text-orange-600 opacity-70">Guest Player</p>
+                       <p className="text-2xl font-bold text-orange-800">3</p>
                      </div>
                      
                      {/* Pass */}
@@ -975,8 +829,7 @@ export default function TeamsPage() {
                          </svg>
                        </div>
                        <p className="text-xs text-blue-700 font-medium mb-1">Pass</p>
-                       <p className="text-2xl font-bold text-blue-800">-</p>
-                       <p className="text-xs text-blue-600 opacity-70">Guest Player</p>
+                       <p className="text-2xl font-bold text-blue-800">3</p>
                      </div>
                      
                      {/* Defend */}
@@ -987,16 +840,14 @@ export default function TeamsPage() {
                          </svg>
                        </div>
                        <p className="text-xs text-green-700 font-medium mb-1">Defend</p>
-                       <p className="text-2xl font-bold text-green-800">-</p>
-                       <p className="text-xs text-green-600 opacity-70">Guest Player</p>
+                       <p className="text-2xl font-bold text-green-800">3</p>
                      </div>
                    </div>
                    
                    {/* Overall Rating */}
-                   <div className="bg-gradient-to-r from-gray-400 to-gray-500 rounded-xl p-4 text-white text-center">
+                   <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-4 text-white text-center">
                      <p className="text-sm opacity-90 mb-1">Overall Rating</p>
-                     <p className="text-3xl font-bold">-</p>
-                     <p className="text-xs opacity-70">No stats available</p>
+                     <p className="text-3xl font-bold">12</p>
                    </div>
                    
                    {/* Preferred Foot */}
@@ -1007,31 +858,10 @@ export default function TeamsPage() {
                        </svg>
                      </div>
                      <p className="text-sm text-gray-600 font-medium mb-1">Preferred Foot</p>
-                     <p className="text-lg font-semibold text-gray-800">Not specified</p>
+                     <p className="text-lg font-semibold text-gray-800">Right</p>
                    </div>
                  </div>
-               ) : loadingPlayerCard ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-500">Loading player stats...</p>
-                </div>
-              ) : error ? (
-                <div className="text-center py-8">
-                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <p className="text-red-600 mb-2">Error loading player data</p>
-                  <p className="text-gray-500 text-sm">{error}</p>
-                  <button 
-                    onClick={() => showPlayerCard(selectedPlayer!)} 
-                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : playerCard ? (
+               ) : playerCard ? (
                 <div className="space-y-6">
                   {/* Stats Grid */}
                   <div className="grid grid-cols-2 gap-4">
@@ -1102,22 +932,18 @@ export default function TeamsPage() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-500">No stats available for this player</p>
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-500">Loading player stats...</p>
                 </div>
               )}
               
               {/* Badges */}
-              {!selectedPlayer.isGuest && selectedPlayer.user?.badges && selectedPlayer.user.badges.length > 0 && (
+              {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-gray-100">
                   <div className="text-center">
                     <h5 className="text-sm font-semibold text-gray-700 mb-3">Achievements</h5>
                     <div className="flex justify-center gap-2 flex-wrap">
-                      {selectedPlayer.user!.badges!.map((badge, i: number) => (
+                      {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
                         <div key={i} className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
                           🏅 MVP Level {badge.level}
                         </div>
@@ -1131,26 +957,6 @@ export default function TeamsPage() {
         </div>
       )}
       
-      {/* Error Display */}
-      {error && (
-        <div className="fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded shadow-lg z-50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <span>{error}</span>
-            </div>
-            <button 
-              onClick={() => setError(null)}
-              className="ml-4 text-red-500 hover:text-red-700"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
-      
       {busy && <p className="text-sm text-gray-500">Processing…</p>}
     </main>
   );
@@ -1158,38 +964,15 @@ export default function TeamsPage() {
 
 function TeamBalance({ eventId, rosterLocked, isOwner }: { eventId: string; rosterLocked: boolean; isOwner: boolean }) {
   const [preview, setPreview] = useState<{ scoreA: number; scoreB: number } | null>(null);
-  const [balancing, setBalancing] = useState(false);
-  const [balanceError, setBalanceError] = useState<string | null>(null);
-  
   const run = async () => {
-    setBalancing(true);
-    setBalanceError(null);
-    try {
-      const r = await fetch(`/api/events/${eventId}/autobalance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'greedy', apply: true }) });
-      if (r.ok) {
-        const d = await r.json();
-        setPreview({ scoreA: d.scoreA, scoreB: d.scoreB });
-      } else {
-        setBalanceError('Failed to balance teams');
-      }
-    } catch (error) {
-      console.error('Auto-balance error:', error);
-      setBalanceError('Network error during team balancing');
-    } finally {
-      setBalancing(false);
-    }
+    const r = await fetch(`/api/events/${eventId}/autobalance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'greedy', apply: true }) });
+    const d = await r.json();
+    setPreview({ scoreA: d.scoreA, scoreB: d.scoreB });
   };
   return (
     <div className="space-y-2">
-      <button 
-        onClick={run} 
-        disabled={rosterLocked || !isOwner || balancing} 
-        className="bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded"
-      >
-        {balancing ? 'Balancing...' : 'Team-Balance'}
-      </button>
+      <button onClick={run} disabled={rosterLocked || !isOwner} className="bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded">Team-Balance</button>
       {rosterLocked && <p className="text-xs text-gray-500">Roster is locked. Auto-balance is disabled.</p>}
-      {balanceError && <p className="text-xs text-red-500">{balanceError}</p>}
       {preview && <p className="text-sm text-gray-600">Balanced • Score A: {preview.scoreA} • Score B: {preview.scoreB}</p>}
     </div>
   );
