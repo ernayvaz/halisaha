@@ -25,11 +25,7 @@ export default function TeamsPage() {
   const [posTeam2, setPosTeam2] = useState<Position[]>([]);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
-  const [addingGuest, setAddingGuest] = useState(false);
   const [optimisticUpdate, setOptimisticUpdate] = useState<any>(null);
-  const [lastGuestAddedAt, setLastGuestAddedAt] = useState<number>(0);
-  const [guestOpen, setGuestOpen] = useState(false);
-  const [guestName, setGuestName] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
   const [playerCard, setPlayerCard] = useState<any>(null);
   const [debounceTimers, setDebounceTimers] = useState<Record<string, NodeJS.Timeout>>({});
@@ -141,7 +137,6 @@ export default function TeamsPage() {
       eventUnsubRef.current = subscribe(e.id, (evt: RealtimeEvent) => {
         // Skip updates during optimistic windows to prevent assignment resets
         if (optimisticUpdate && Date.now() - optimisticUpdate < 1500) return;
-        if (lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000) return;
         
         if (evt.type === 'participants_updated') {
           fetch(`/api/events/${e.id}/participants`).then(r => r.json()).then(setParticipants).catch(() => {});
@@ -567,31 +562,7 @@ export default function TeamsPage() {
     );
   };
 
-  const addGuest = () => {
-    if (!eventData) return;
-    // Optimistically add a temp guest
-    const existingGuests = participants.filter(p => p.isGuest).length;
-    const guestName = `Guest ${existingGuests + 1}`;
-    const tmpId = `tmp-${Date.now()}`;
-    const tmpGuest: Participant = { id: tmpId, isGuest: true, guestName, user: undefined };
-    setParticipants(prev => Array.isArray(prev) ? [...prev, tmpGuest] : [tmpGuest]);
-    setAddingGuest(true);
-    // Call server to create guest
-    (async () => {
-    try {
-      const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join' }) });
-        if (!r.ok) throw new Error('guest create failed');
-        const created = await r.json();
-        // Replace tmp guest with real record
-        setParticipants(prev => prev.map(p => p.id === tmpId ? created : p));
-        setLastGuestAddedAt(Date.now());
-      } catch (err) {
-        console.error('Guest creation error', err);
-        // Optionally remove tmp on error
-        setParticipants(prev => prev.filter(p => p.id !== tmpId));
-      } finally { setAddingGuest(false); }
-    })();
-  };
+  // '+1 Guest' functionality removed
 
   if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
 
@@ -612,7 +583,6 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            <button onClick={addGuest} disabled={addingGuest} className="text-xs border rounded px-2 py-1 disabled:opacity-50">{addingGuest ? 'Adding...' : '+1 Guest'}</button>
           </div>
           <ul className="space-y-2">
             {participants.map((p)=> (
