@@ -172,10 +172,6 @@ export default function LineupPage() {
     <main className="p-6 max-w-4xl mx-auto space-y-4">
       <MatchInfo eventCode={params.code} title="Lineup" />
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
-          <button onClick={()=>setSelectedTeamIdx(1)} className={`px-3 py-1 rounded border ${selectedTeamIdx===1?'bg-gray-100':''}`}>Team 1</button>
-          <button onClick={()=>setSelectedTeamIdx(2)} className={`px-3 py-1 rounded border ${selectedTeamIdx===2?'bg-gray-100':''}`}>Team 2</button>
-        </div>
         <div className="flex items-center gap-2">
           <button onClick={exportPng} className="border px-3 py-1 rounded">Export PNG</button>
           <button onClick={toggleLineupLock} className="border px-3 py-1 rounded">Lineup Lock: {eventData.lineupLocked? 'On':'Off'}</button>
@@ -187,7 +183,7 @@ export default function LineupPage() {
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded" style={{ backgroundColor: (teams.find(x=>x.index===selectedTeamIdx)?.color || '#16a34a') }} />
-            <div className="font-medium text-sm">{teams.find(x=>x.index===selectedTeamIdx)?.name || (selectedTeamIdx===1?'Team 1':'Team 2')}</div>
+            <div className="font-medium text-sm">Team</div>
           </div>
           <div className="text-xs text-gray-500">{teams.find(x=>x.index===selectedTeamIdx)?.formation || '1-2-2-1'}</div>
         </div>

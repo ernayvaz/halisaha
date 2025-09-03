@@ -18,14 +18,17 @@ export default function TeamsPage() {
   const [eventData, setEventData] = useState<Event | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [assignmentsByTeam, setAssignmentsByTeam] = useState<Record<string, number>>({});
   const [asgnTeam1, setAsgnTeam1] = useState<Assignment[]>([]);
   const [asgnTeam2, setAsgnTeam2] = useState<Assignment[]>([]);
   const [posTeam1, setPosTeam1] = useState<Position[]>([]);
   const [posTeam2, setPosTeam2] = useState<Position[]>([]);
+  const [assignmentsByTeam, setAssignmentsByTeam] = useState<Record<string, number>>({});
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
   const [optimisticUpdate, setOptimisticUpdate] = useState<any>(null);
+  const [lastGuestAddedAt, setLastGuestAddedAt] = useState<number>(0);
+  const [guestOpen, setGuestOpen] = useState(false);
+  const [guestName, setGuestName] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
   const [playerCard, setPlayerCard] = useState<any>(null);
   const [debounceTimers, setDebounceTimers] = useState<Record<string, NodeJS.Timeout>>({});
@@ -137,6 +140,7 @@ export default function TeamsPage() {
       eventUnsubRef.current = subscribe(e.id, (evt: RealtimeEvent) => {
         // Skip updates during optimistic windows to prevent assignment resets
         if (optimisticUpdate && Date.now() - optimisticUpdate < 1500) return;
+        if (lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000) return;
         
         if (evt.type === 'participants_updated') {
           fetch(`/api/events/${e.id}/participants`).then(r => r.json()).then(setParticipants).catch(() => {});
@@ -260,55 +264,6 @@ export default function TeamsPage() {
     setBusy(false);
   };
 
-    const assign = (idx: 1|2, participantId: string) => {
-    const t = team(idx);
-    if (!t) return;
-    
-    // Check if player is already in the selected team
-      const from1 = asgnTeam1.find(a=>a.participantId===participantId);
-      const from2 = asgnTeam2.find(a=>a.participantId===participantId);
-      const participant = participants.find(p=>p.id===participantId);
-      if (!participant) return;
-    
-    // If player is already in the selected team, do nothing
-    if ((idx === 1 && from1) || (idx === 2 && from2)) return;
-    
-    // Immediate UI feedback for all users
-      const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
-    
-    setOptimisticUpdate(Date.now());
-    if (idx === 1) {
-      setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
-      if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
-      } else {
-      setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
-      if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
-      }
-    
-            // Counts will be updated by useEffect below
-
-    if (isOwner) {
-      // Debounced API call for owners
-      const key = `assign-${participantId}`;
-      if (debounceTimers[key]) {
-        clearTimeout(debounceTimers[key]);
-      }
-      
-      const timer = setTimeout(async () => {
-        try {
-          // Server enforces single-team constraint transactionally
-          await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
-        } catch (error) {
-          console.error('Assignment failed:', error);
-        } finally {
-          setTimeout(()=>setOptimisticUpdate(null), 500);
-        }
-      }, 300); // 300ms debounce
-      
-      setDebounceTimers(prev => ({ ...prev, [key]: timer }));
-    }
-  };
-
   const toggleRosterLock = async () => {
     if (!eventData || !isOwner) return;
     const r = await fetch(`/api/events/${eventData.id}/flags`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterLocked: !eventData.rosterLocked }) });
@@ -338,6 +293,80 @@ export default function TeamsPage() {
       await refreshTeamData(eventData.id, tlist);
     }
     setBusy(false);
+  };
+
+  const assign = (idx: 1|2, participantId: string) => {
+    const t = team(idx);
+    if (!t) return;
+    
+    // Check if player is already in the selected team
+    const from1 = asgnTeam1.find(a=>a.participantId===participantId);
+    const from2 = asgnTeam2.find(a=>a.participantId===participantId);
+    const participant = participants.find(p=>p.id===participantId);
+    if (!participant) return;
+    
+    // If player is already in the selected team, do nothing
+    if ((idx === 1 && from1) || (idx === 2 && from2)) return;
+    
+    // Immediate UI feedback for all users
+    const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
+    
+    setOptimisticUpdate(Date.now());
+    if (idx === 1) {
+      setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
+      if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
+    } else {
+      setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
+      if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
+    }
+    
+    // Counts will be updated by useEffect below
+
+    if (isOwner) {
+      // Debounced API call for owners
+      const key = `assign-${participantId}`;
+      if (debounceTimers[key]) {
+        clearTimeout(debounceTimers[key]);
+      }
+      
+      const timer = setTimeout(async () => {
+        try {
+          if (from1 || from2) {
+            const otherTeamId = from1 ? team1?.id : team2?.id;
+            if (otherTeamId) {
+              await fetch(`/api/teams/${otherTeamId}/assignments?participantId=${participantId}`, { method: 'DELETE' });
+            }
+          }
+          await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
+        } catch (error) {
+          console.error('Assignment failed:', error);
+        } finally {
+          setTimeout(()=>setOptimisticUpdate(null), 500);
+        }
+      }, 300); // 300ms debounce
+      
+      setDebounceTimers(prev => ({ ...prev, [key]: timer }));
+    }
+  };
+
+  const removePlayer = async (participantId: string) => {
+    if (!eventData || !isOwner) return;
+    if (!confirm('Remove this player from the event?')) return;
+    
+    try {
+      // Remove from both teams
+      await fetch(`/api/teams/${team1?.id}/assignments?participantId=${participantId}`, { method:'DELETE' }).catch(()=>{});
+      await fetch(`/api/teams/${team2?.id}/assignments?participantId=${participantId}`, { method:'DELETE' }).catch(()=>{});
+      
+      // Remove participant from event
+      await fetch(`/api/events/${eventData.id}/participants/${participantId}`, { method:'DELETE' });
+      
+      // Refresh participants list
+      const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json());
+      setParticipants(plist);
+    } catch (error) {
+      console.error('Failed to remove player:', error);
+    }
   };
 
   const team1 = useMemo(()=>team(1), [teams]);
@@ -562,8 +591,6 @@ export default function TeamsPage() {
     );
   };
 
-  // '+1 Guest' functionality removed
-
   if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
 
   return (
@@ -601,35 +628,35 @@ export default function TeamsPage() {
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
-                    {(() => { 
-                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
-                      const teamName = team1?.name || 'Team 1';
-                      return <button 
-                        onClick={()=>assign(1,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c) }}
-                        disabled={inTeam1}
-                      >
-                        {teamName}
-                      </button>; 
-                    })()}
-                    {(() => { 
-                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
-                      const teamName = team2?.name || 'Team 2';
-                      return <button 
-                        onClick={()=>assign(2,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c) }}
-                        disabled={inTeam2}
-                      >
-                        {teamName}
-                      </button>; 
-                    })()}
-                  <button onClick={async()=>{ if (!eventData || !isOwner) return; await fetch(`/api/teams/${team1?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/teams/${team2?.id}/assignments?participantId=${p.id}`, { method:'DELETE' }).catch(()=>{}); await fetch(`/api/events/${eventData.id}/participants`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mode:'view' }) }).catch(()=>{}); const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json()); setParticipants(plist); }} className="text-xs border rounded px-2 py-1">Remove</button>
+                  {(() => { 
+                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                    const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
+                    const teamName = team1?.name || 'Team 1';
+                    return <button 
+                      onClick={()=>assign(1,p.id)} 
+                      className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                      style={{ backgroundColor: c, color: textColorFor(c) }}
+                      disabled={inTeam1}
+                    >
+                      {teamName}
+                    </button>; 
+                  })()}
+                  {(() => { 
+                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                    const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
+                    const teamName = team2?.name || 'Team 2';
+                    return <button 
+                      onClick={()=>assign(2,p.id)} 
+                      className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                      style={{ backgroundColor: c, color: textColorFor(c) }}
+                      disabled={inTeam2}
+                    >
+                      {teamName}
+                    </button>; 
+                  })()}
+                  {isOwner && <button onClick={()=>removePlayer(p.id)} className="text-xs border rounded px-2 py-1 text-red-600 hover:bg-red-50">Remove</button>}
                 </div>
               </li>
             ))}
@@ -672,7 +699,7 @@ export default function TeamsPage() {
                 {asgnTeam1.map(a=> (
                   <li key={a.id} className="py-1 text-xs flex justify-between items-center">
                     <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                    <button className="text-xs border rounded px-1 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>×</button>
+                    {isOwner && <button className="text-xs border rounded px-1 py-0.5 text-red-600 hover:bg-red-50" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>×</button>}
                   </li>
                 ))}
               </ul>
@@ -716,7 +743,7 @@ export default function TeamsPage() {
                 {asgnTeam2.map(a=> (
                   <li key={a.id} className="py-1 text-xs flex justify-between items-center">
                     <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                    <button className="text-xs border rounded px-1 py-0.5" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>×</button>
+                    {isOwner && <button className="text-xs border rounded px-1 py-0.5 text-red-600 hover:bg-red-50" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>×</button>}
                   </li>
                 ))}
               </ul>

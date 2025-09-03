@@ -48,15 +48,6 @@ export default function Lobby() {
     loadCard();
   }, [selected?.user?.id]);
 
-  const addGuest = async (name: string) => {
-    if (!eventId || !name) return;
-    const r = await fetch(`/api/events/${eventId}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
-    if (r.ok) {
-      const plist = await fetch(`/api/events/${eventId}/participants`).then(x=>x.json());
-      setParticipants(plist);
-    }
-  };
-
   const MVPBadge = ({ p }: { p: Participant }) => {
     const b = p.user?.badges && p.user.badges[0];
     if (!b) return null;
@@ -68,13 +59,6 @@ export default function Lobby() {
       <h1 className="text-xl font-semibold">Lobby</h1>
       <p className="text-sm text-gray-500">Join to edit teams and lineup. Viewers can only see participants.</p>
       <section className="space-y-3">
-        <div className="flex gap-2 items-end">
-          <div className="flex-1">
-            <label className="block text-sm">Guest Player</label>
-            <input id="guestName" className="border rounded p-2 w-full" placeholder="Guest Player name" />
-          </div>
-          <button onClick={()=>{const v=(document.getElementById('guestName') as HTMLInputElement).value; addGuest(v); (document.getElementById('guestName') as HTMLInputElement).value='';}} className="border px-3 py-2 rounded">Add Guest Player</button>
-        </div>
         <ul className="divide-y border rounded">
           {participants.map((p)=> (
             <li key={p.id} className="p-2 flex justify-between items-center">
