@@ -136,14 +136,20 @@ export default function TeamsPage() {
     (async () => {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
       unsub = subscribe(e.id, (evt: RealtimeEvent) => {
+        // Skip updates during optimistic windows to prevent assignment resets
+        if (optimisticUpdate && Date.now() - optimisticUpdate < 1500) return;
+        if (lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000) return;
+        
         if (evt.type === 'participants_updated') {
           fetch(`/api/events/${e.id}/participants`).then(r => r.json()).then(setParticipants).catch(() => {});
         } else if (evt.type === 'teams_updated') {
           fetch(`/api/events/${e.id}/teams`).then(r => r.json()).then(setTeams).catch(() => {});
         } else if (evt.type === 'assignments_updated') {
-          // Refresh assignments for both teams
-          if (team1?.id) fetch(`/api/teams/${team1.id}/assignments`).then(r=>r.json()).then(setAsgnTeam1).catch(()=>{});
-          if (team2?.id) fetch(`/api/teams/${team2.id}/assignments`).then(r=>r.json()).then(setAsgnTeam2).catch(()=>{});
+          // Only refresh if not in optimistic state
+          setTimeout(() => {
+            if (team1?.id) fetch(`/api/teams/${team1.id}/assignments`).then(r=>r.json()).then(setAsgnTeam1).catch(()=>{});
+            if (team2?.id) fetch(`/api/teams/${team2.id}/assignments`).then(r=>r.json()).then(setAsgnTeam2).catch(()=>{});
+          }, 100);
         } else if (evt.type === 'positions_updated') {
           if (team1?.id) fetch(`/api/teams/${team1.id}/positions`).then(r=>r.json()).then(setPosTeam1).catch(()=>{});
           if (team2?.id) fetch(`/api/teams/${team2.id}/positions`).then(r=>r.json()).then(setPosTeam2).catch(()=>{});
@@ -266,7 +272,7 @@ export default function TeamsPage() {
         } catch (error) {
           console.error('Assignment failed:', error);
         } finally {
-          setTimeout(()=>setOptimisticUpdate(null), 400);
+          setTimeout(()=>setOptimisticUpdate(null), 500);
         }
       }, 300); // 300ms debounce
       
