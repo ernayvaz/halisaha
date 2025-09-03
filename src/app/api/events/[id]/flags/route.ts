@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publish } from '@/lib/realtime';
-import { cookies } from 'next/headers';
-
-async function ensureOwner(eventId: string) {
-  const cookieStore = await cookies();
-  const deviceToken = cookieStore.get('device_token')?.value;
-  if (!deviceToken) return false;
-  const device = await prisma.device.findUnique({ where: { deviceToken }, select: { userId: true } });
-  if (!device?.userId) return false;
-  const me = await prisma.participant.findFirst({ where: { eventId, userId: device.userId } });
-  return me?.role === 'owner';
-}
+import { ensureOwner } from '@/lib/auth';
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;

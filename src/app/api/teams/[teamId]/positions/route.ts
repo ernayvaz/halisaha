@@ -2,17 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publish } from '@/lib/realtime';
 import { rateLimit } from '@/lib/rateLimit';
-import { cookies } from 'next/headers';
-
-async function ensureOwner(eventId: string) {
-  const cookieStore = await cookies();
-  const deviceToken = cookieStore.get('device_token')?.value;
-  if (!deviceToken) return false;
-  const device = await prisma.device.findUnique({ where: { deviceToken }, select: { userId: true } });
-  if (!device?.userId) return false;
-  const me = await prisma.participant.findFirst({ where: { eventId, userId: device.userId } });
-  return me?.role === 'owner';
-}
+import { ensureOwner } from '@/lib/auth';
 
 export async function GET(_: NextRequest, context: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await context.params;
