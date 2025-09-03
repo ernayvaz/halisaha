@@ -135,34 +135,20 @@ export default function TeamsPage() {
     let unsub = () => {};
     (async () => {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
-      unsub = subscribe(e.id, (evt: RealtimeEvent)=>{
-        if (evt.type==='participants_updated') {
-          // Light participants-only refresh to avoid resetting assignments
-          if (!(lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000)) {
-            fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()).then(setParticipants).catch(()=>{});
-          }
-          return;
-        }
-        if (evt.type==='teams_updated' || evt.type==='assignments_updated' || evt.type==='flags_updated' || evt.type==='positions_updated') {
-          // Skip heavy refresh right after guest add or during optimistic assignment window
-          if ((lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000) || 
-              (optimisticUpdate && Date.now() - optimisticUpdate < 1200)) {
-            return;
-          }
-          gateIfNeeded(code);
-          Promise.all([
-            fetch(`/api/events/${e.id}/participants`).then((r)=>r.json()).then(setParticipants),
-            fetch(`/api/events/${e.id}/teams`).then((r)=>r.json()).then(async (tlist: Team[])=>{
-              setTeams(tlist);
-              const counts = Object.fromEntries(await Promise.all(tlist.map(async (t: Team)=>{
-                const asg = await fetch(`/api/teams/${t.id}/assignments`).then(r=>r.json());
-                return [t.id, asg.length];
-              })));
-              setAssignmentsByTeam(counts);
-              await ensureFormationIfMissing(e.id, tlist, counts);
-              await refreshTeamData(e.id, tlist);
-            }),
-          ]);
+      unsub = subscribe(e.id, (evt: RealtimeEvent) => {
+        if (evt.type === 'participants_updated') {
+          fetch(`/api/events/${e.id}/participants`).then(r => r.json()).then(setParticipants).catch(() => {});
+        } else if (evt.type === 'teams_updated') {
+          fetch(`/api/events/${e.id}/teams`).then(r => r.json()).then(setTeams).catch(() => {});
+        } else if (evt.type === 'assignments_updated') {
+          // Refresh assignments for both teams
+          if (team1?.id) fetch(`/api/teams/${team1.id}/assignments`).then(r=>r.json()).then(setAsgnTeam1).catch(()=>{});
+          if (team2?.id) fetch(`/api/teams/${team2.id}/assignments`).then(r=>r.json()).then(setAsgnTeam2).catch(()=>{});
+        } else if (evt.type === 'positions_updated') {
+          if (team1?.id) fetch(`/api/teams/${team1.id}/positions`).then(r=>r.json()).then(setPosTeam1).catch(()=>{});
+          if (team2?.id) fetch(`/api/teams/${team2.id}/positions`).then(r=>r.json()).then(setPosTeam2).catch(()=>{});
+        } else if (evt.type === 'flags_updated') {
+          fetch(`/api/events?code=${encodeURIComponent(code)}`).then(r=>r.json()).then(setEventData).catch(()=>{});
         }
       });
     })();
@@ -429,8 +415,9 @@ export default function TeamsPage() {
     if (!team) return null;
     const labelFor = (pid: string) => {
       const a = asgn.find(x=>x.participantId===pid);
-      const label = a?.participant.isGuest ? (a?.participant.guestName||'Guest') : (a?.participant.user?.displayName || a?.participant.user?.handle || 'Player');
-      return label;
+      if (!a) return 'Player';
+      if (a.participant.isGuest) return a.participant.guestName || 'Guest';
+      return a.participant.user?.displayName || a.participant.user?.handle || 'Player';
     };
     const tokenPos = (idx: number, pid: string) => {
       const p = pos.find(x=>x.participantId===pid);
@@ -473,8 +460,8 @@ export default function TeamsPage() {
       if (!posi) return;
       if (!eventData?.lineupLocked || isOwner) {
         if (isOwner) {
-          await fetch(`/api/teams/${team.id}/positions`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ participantId:id, x: posi.x, y: posi.y }) });
-          const fresh = await fetch(`/api/teams/${team.id}/positions`).then(r=>r.json()); setPos(fresh);
+        await fetch(`/api/teams/${team.id}/positions`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ participantId:id, x: posi.x, y: posi.y }) });
+        const fresh = await fetch(`/api/teams/${team.id}/positions`).then(r=>r.json()); setPos(fresh);
         }
         // For non-owners, just update local state for preview
       }
@@ -542,21 +529,28 @@ export default function TeamsPage() {
     );
   };
 
-  const addGuest = async () => {
-    if (!eventData || addingGuest) return;
-    setAddingGuest(true);
+  const addGuest = () => {
+    if (!eventData) return;
+    // Optimistically add a temp guest
+    const existingGuests = participants.filter(p => p.isGuest).length;
+    const guestName = `Guest ${existingGuests + 1}`;
+    const tmpId = `tmp-${Date.now()}`;
+    const tmpGuest: Participant = { id: tmpId, isGuest: true, guestName, user: undefined };
+    setParticipants(prev => Array.isArray(prev) ? [...prev, tmpGuest] : [tmpGuest]);
+    // Call server to create guest
+    (async () => {
     try {
       const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join' }) });
-      if (!r.ok) throw new Error('guest add failed');
-      const created = await r.json();
-      // Optimistic add to avoid heavy refresh that resets assignments
-      setParticipants((prev) => Array.isArray(prev) ? [...prev, created] : [created]);
-      setLastGuestAddedAt(Date.now());
-    } catch (error) {
-      console.error('Failed to add guest:', error);
-    } finally {
-      setAddingGuest(false);
-    }
+        if (!r.ok) throw new Error('guest create failed');
+        const created = await r.json();
+        // Replace tmp guest with real record
+        setParticipants(prev => prev.map(p => p.id === tmpId ? created : p));
+      } catch (err) {
+        console.error('Guest creation error', err);
+        // Optionally remove tmp on error
+        setParticipants(prev => prev.filter(p => p.id !== tmpId));
+      }
+    })();
   };
 
   if (!eventData) return <main className="p-6 max-w-4xl mx-auto">Loading…</main>;
