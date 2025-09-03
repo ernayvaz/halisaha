@@ -1,10 +1,21 @@
 const BASE = process.env.BASE || 'http://localhost:3000';
 
+let deviceCookie = '';
 const fetchWithTimeout = async (url, opts = {}, ms = 20000) => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
   try {
-    const res = await fetch(url, { ...opts, signal: controller.signal });
+    const headers = Object.assign({}, opts.headers || {});
+    if (deviceCookie) headers['Cookie'] = deviceCookie;
+    const res = await fetch(url, { ...opts, headers, signal: controller.signal, redirect: 'follow' });
+    // Capture device_token cookie if set
+    try {
+      const setCookie = res.headers.get('set-cookie');
+      if (setCookie && setCookie.includes('device_token=')) {
+        const match = setCookie.match(/device_token=[^;]+/);
+        if (match) deviceCookie = match[0];
+      }
+    } catch {}
     const text = await res.text();
     let json;
     try { json = JSON.parse(text); } catch { json = text; }
@@ -19,7 +30,12 @@ const assert = (cond, label) => { if (!cond) throw new Error('ASSERT_FAIL ' + la
   const log = (k, v) => { out.push({ [k]: v }); console.log('---', k, JSON.stringify(v)); };
 
   // 1) Create event
-  const ce = await fetchWithTimeout(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'E2E', durationMinutes: 60 }) });
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(now.getFullYear());
+  const todayDdMmYyyy = `${dd}-${mm}-${yyyy}`;
+  const ce = await fetchWithTimeout(`${BASE}/api/events`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'E2E', date: todayDdMmYyyy, startTime: '20:00', durationMinutes: 60 }) });
   log('create_event', ce); assert(ce.ok && ce.json.code, 'create_event');
   const { id: eventId, code } = ce.json;
 

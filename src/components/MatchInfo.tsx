@@ -25,16 +25,19 @@ export default function MatchInfo({ eventCode, title }: { eventCode?: string; ti
 
   useEffect(() => {
     if (!eventCode) return;
+    let cancelled = false;
     const loadEvent = async () => {
       try {
         const r = await fetch(`/api/events?code=${encodeURIComponent(eventCode)}`);
         if (r.ok) {
           const e = await r.json();
-          setEventData(e);
+          if (!cancelled) setEventData(e);
         }
       } catch {}
     };
     loadEvent();
+    const id = setInterval(loadEvent, 30_000); // refresh every 30s
+    return () => { cancelled = true; clearInterval(id); };
   }, [eventCode]);
 
   useEffect(() => {
@@ -42,7 +45,7 @@ export default function MatchInfo({ eventCode, title }: { eventCode?: string; ti
     
     const updateCountdown = () => {
       try {
-        const [day, month, year] = eventData.date!.split('T')[0].split('-').map(Number);
+        const [year, month, day] = eventData.date!.split('T')[0].split('-').map(Number); // stored ISO yyyy-mm-dd
         const [hour, minute] = eventData.startTime!.split(':').map(Number);
         const matchDate = new Date(year, month - 1, day, hour, minute);
         const now = new Date();
@@ -85,7 +88,7 @@ export default function MatchInfo({ eventCode, title }: { eventCode?: string; ti
         {title && <h1 className="text-xl font-semibold">{title}</h1>}
         {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
       </div>
-      <div className="bg-gray-100 px-3 py-1 rounded-lg text-sm font-mono text-gray-700">
+      <div className="bg-green-700/70 px-3 py-1 rounded-lg text-sm font-mono text-white border-2 border-white">
         {countdown}
       </div>
     </div>

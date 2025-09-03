@@ -301,12 +301,7 @@ export default function TeamsPage() {
       
       const timer = setTimeout(async () => {
         try {
-          if (from1 || from2) {
-            const otherTeamId = from1 ? team1?.id : team2?.id;
-            if (otherTeamId) {
-              await fetch(`/api/teams/${otherTeamId}/assignments?participantId=${participantId}`, { method: 'DELETE' });
-            }
-          }
+          // Server enforces single-team constraint transactionally
           await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
         } catch (error) {
           console.error('Assignment failed:', error);

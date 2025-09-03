@@ -34,11 +34,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ teamId
   if (!(await ensureOwner(team.eventId))) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const { participantId } = (await req.json()) as { participantId: string };
-  const created = await prisma.assignment.upsert({
-    where: { teamId_participantId: { teamId, participantId } },
-    update: {},
-    create: { teamId, participantId },
-  });
+
+  // Enforce: a participant can belong to only one team within the same event
+  const teamIds = (await prisma.team.findMany({ where: { eventId: event.id }, select: { id: true } })).map(t=>t.id);
+  const [_, created] = await prisma.$transaction([
+    prisma.assignment.deleteMany({ where: { teamId: { in: teamIds }, participantId } }),
+    prisma.assignment.upsert({ where: { teamId_participantId: { teamId, participantId } }, update: {}, create: { teamId, participantId } })
+  ]);
   await publish({ type: 'assignments_updated', teamId });
   await publish({ type: 'teams_updated', eventId: event.id });
   return NextResponse.json(created, { status: 201 });
