@@ -25,6 +25,7 @@ export default function TeamsPage() {
   const [assignmentsByTeam, setAssignmentsByTeam] = useState<Record<string, number>>({});
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
+  const [addingGuest, setAddingGuest] = useState(false);
   const [optimisticUpdate, setOptimisticUpdate] = useState<any>(null);
   const [lastGuestAddedAt, setLastGuestAddedAt] = useState<number>(0);
   const [guestOpen, setGuestOpen] = useState(false);
@@ -347,6 +348,52 @@ export default function TeamsPage() {
       }, 300); // 300ms debounce
       
       setDebounceTimers(prev => ({ ...prev, [key]: timer }));
+    }
+  };
+
+  const addGuest = async () => {
+    if (!eventData || !isOwner) return;
+    
+    // Generate sequential guest name
+    const existingGuests = participants.filter(p => p.isGuest);
+    const guestNumbers = existingGuests.map(p => {
+      const match = p.guestName?.match(/^Guest (\d+)$/);
+      return match ? parseInt(match[1], 10) : 0;
+    }).filter(n => n > 0);
+    
+    const nextNumber = guestNumbers.length > 0 ? Math.max(...guestNumbers) + 1 : 1;
+    const guestName = `Guest ${nextNumber}`;
+    
+    // Optimistically add temp guest
+    const tmpId = `tmp-${Date.now()}`;
+    const tmpGuest: Participant = { 
+      id: tmpId, 
+      isGuest: true, 
+      guestName, 
+      user: undefined 
+    };
+    setParticipants(prev => Array.isArray(prev) ? [...prev, tmpGuest] : [tmpGuest]);
+    setAddingGuest(true);
+    
+    try {
+      const response = await fetch(`/api/events/${eventData.id}/participants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'join', guestName })
+      });
+      
+      if (!response.ok) throw new Error('Guest creation failed');
+      
+      const created = await response.json();
+      // Replace temp guest with real record
+      setParticipants(prev => prev.map(p => p.id === tmpId ? created : p));
+      setLastGuestAddedAt(Date.now());
+    } catch (error) {
+      console.error('Guest creation error:', error);
+      // Remove temp guest on error
+      setParticipants(prev => prev.filter(p => p.id !== tmpId));
+    } finally {
+      setAddingGuest(false);
     }
   };
 
@@ -805,6 +852,15 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
+            {isOwner && (
+              <button 
+                onClick={addGuest} 
+                disabled={addingGuest || eventData?.rosterLocked} 
+                className="text-xs border rounded px-2 py-1 disabled:opacity-50 hover:bg-gray-50"
+              >
+                {addingGuest ? 'Adding...' : '+1 Guest'}
+              </button>
+            )}
           </div>
           <ul className="space-y-2">
             {participants.map((p)=> (

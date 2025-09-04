@@ -126,13 +126,13 @@ export default function Landing() {
         </p>
       </div>
       
-      {/* Current Participants */}
-      <ParticipantsList eventId={eventData.id} />
-      
       <div className="space-y-3">
         <button disabled={busy} onClick={() => go("join")} className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded disabled:opacity-50">Join Team</button>
         <button disabled={busy} onClick={() => go("view")} className="w-full border px-4 py-3 rounded disabled:opacity-50">Continue as viewer</button>
       </div>
+      
+      {/* Current Participants */}
+      <ParticipantsList eventId={eventData.id} />
     </main>
   );
 }
