@@ -352,7 +352,8 @@ export default function TeamsPage() {
   };
 
   const addGuest = async () => {
-    if (!eventData) return;
+    if (!eventData || addingGuest) return;
+    
     // Determine next sequential guest name from current list
     const existingGuests = participants.filter(p => p.isGuest);
     const nextNumber = (() => {
@@ -364,21 +365,48 @@ export default function TeamsPage() {
     })();
     const name = `Guest ${nextNumber}`;
 
-    // Optimistic local insert
+    // Optimistic local insert with visual feedback
     const tmpId = `tmp-${Date.now()}`;
-    const tmpGuest: Participant = { id: tmpId, isGuest: true, guestName: name, user: undefined };
-    setParticipants(prev => [...prev, tmpGuest]);
+    const tmpGuest: Participant = { 
+      id: tmpId, 
+      isGuest: true, 
+      guestName: name, 
+      user: undefined 
+    };
+    
+    setParticipants(prev => Array.isArray(prev) ? [...prev, tmpGuest] : [tmpGuest]);
     setAddingGuest(true);
+    
     try {
-      const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
-      if (!r.ok) throw new Error('guest_create_failed');
-      const created = await r.json();
+      const response = await fetch(`/api/events/${eventData.id}/participants`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ mode: 'join', guestName: name }) 
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add guest');
+      }
+      
+      const created = await response.json();
+      
+      // Replace temporary guest with real one
       setParticipants(prev => prev.map(p => p.id === tmpId ? created : p));
       setLastGuestAddedAt(Date.now());
-    } catch (e) {
-      // Revert on failure
+      
+      // Show success feedback
+      console.log(`Successfully added ${created.guestName}`);
+      
+    } catch (error) {
+      // Revert optimistic update on failure
       setParticipants(prev => prev.filter(p => p.id !== tmpId));
-      console.error('Guest creation error:', e);
+      console.error('Guest creation error:', error);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add guest player';
+      alert(`Error: ${errorMessage}`);
+      
     } finally {
       setAddingGuest(false);
     }
@@ -839,8 +867,24 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            <button onClick={addGuest} disabled={addingGuest || !!eventData?.rosterLocked} className="text-xs border rounded px-2 py-1 disabled:opacity-50 hover:bg-gray-50">
-              {addingGuest ? 'Adding...' : '+1 Guest'}
+            <button 
+              onClick={addGuest} 
+              disabled={addingGuest || !!eventData?.rosterLocked || !isOwner} 
+              className="text-xs border rounded px-2 py-1 disabled:opacity-50 hover:bg-green-50 hover:border-green-300 transition-colors"
+            >
+              {addingGuest ? (
+                <span className="flex items-center gap-1">
+                  <div className="w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                  Adding...
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Guest
+                </span>
+              )}
             </button>
           </div>
           <ul className="space-y-2">
