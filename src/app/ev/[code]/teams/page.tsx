@@ -52,11 +52,12 @@ export default function TeamsPage() {
     }
   };
 
-  function positionsForFormation(formation: string): { x:number; y:number }[] {
+  function positionsForFormation(formation: string): { x:number; y:number; role: 'goalkeeper' | 'defender' | 'midfielder' | 'forward' }[] {
     const parts = formation.split('-').map((n)=>parseInt(n,10));
     const a = parts[1]||0, b = parts[2]||0, c = parts[3]||0;
     // Rotated: y positions for vertical layout (goal top, midfield bottom)
     const ys = [0.28, 0.56, 0.86];
+    const roles = ['defender', 'midfielder', 'forward'] as const;
     const spread = (count: number): number[] => {
       if (count <= 0) return [];
       if (count === 1) return [0.5];
@@ -64,12 +65,12 @@ export default function TeamsPage() {
       for (let i=0;i<count;i++) xs.push(0.2 + (i*(0.6/(count-1))));
       return xs;
     };
-    const out: {x:number;y:number}[] = [];
+    const out: {x:number;y:number; role: 'goalkeeper' | 'defender' | 'midfielder' | 'forward'}[] = [];
     // Goalkeeper at top center
-    out.push({ x: 0.5, y: 0.14 });
+    out.push({ x: 0.5, y: 0.14, role: 'goalkeeper' });
     [a,b,c].forEach((cnt, idx)=>{
       const xs = spread(cnt);
-      xs.forEach((x)=>out.push({ x, y: ys[idx] }));
+      xs.forEach((x)=>out.push({ x, y: ys[idx], role: roles[idx] }));
     });
     return out;
   }
@@ -106,31 +107,7 @@ export default function TeamsPage() {
         fetch(`/api/events/${e.id}/teams`).then((r)=>r.json()),
         fetch('/api/me').then(r=>r.ok?r.json():null).catch(()=>null),
       ]);
-      
-      // Enhance participants with user stats
-      const enhancedParticipants = await Promise.all(
-        plist.map(async (p: Participant) => {
-          if (!p.isGuest && p.user?.id) {
-            try {
-              const userStats = await fetch(`/api/users/${p.user.id}/card`).then(r => r.ok ? r.json() : null).catch(() => null);
-              if (userStats) {
-                return {
-                  ...p,
-                  user: {
-                    ...p.user,
-                    pace: userStats.pace,
-                    shoot: userStats.shoot,
-                    pass: userStats.pass,
-                    defend: userStats.defend
-                  }
-                };
-              }
-            } catch {}
-          }
-          return p;
-        })
-      );
-      setParticipants(enhancedParticipants); 
+      setParticipants(plist); 
       
       // Ensure teams exist immediately
       let tlist = initialTlist;
@@ -234,152 +211,6 @@ export default function TeamsPage() {
     }
   };
 
-  const calculatePlayerScore = (participant: Participant, primaryStat: 'pace' | 'shoot' | 'pass' | 'defend') => {
-    if (participant.isGuest) {
-      // Default stats for guests
-      const stats = { pace: 3, shoot: 3, pass: 3, defend: 3 };
-      const primary = stats[primaryStat];
-      const others = Object.values(stats).filter((_, i) => Object.keys(stats)[i] !== primaryStat);
-      const otherAvg = others.reduce((sum, val) => sum + val, 0) / others.length;
-      return primary + otherAvg + Math.random() * 0.1; // Small random for tiebreaking
-    }
-    
-    if (!participant.user) return 0;
-    
-    const stats = {
-      pace: participant.user.pace || 1,
-      shoot: participant.user.shoot || 1,
-      pass: participant.user.pass || 1,
-      defend: participant.user.defend || 1
-    };
-    
-    const primary = stats[primaryStat];
-    const others = Object.values(stats).filter((_, i) => Object.keys(stats)[i] !== primaryStat);
-    const otherAvg = others.reduce((sum, val) => sum + val, 0) / others.length;
-    
-    return primary + otherAvg + Math.random() * 0.1; // Small random for tiebreaking
-  };
-
-  const autoPositionTeam = async (teamIndex: 1|2, assignments: Assignment[]) => {
-    if (!isOwner || !eventData) return;
-    
-    const team = teams.find(t => t.index === teamIndex);
-    if (!team || assignments.length === 0) return;
-    
-    // Get formation positions
-    const formationPositions = positionsForFormation(team.formation);
-    if (formationPositions.length === 0) return;
-    
-    // Categorize positions by role
-    const positions = formationPositions.map((pos, idx) => ({ ...pos, index: idx }));
-    
-    // Position 0 is always goalkeeper
-    const goalkeeper = positions[0];
-    const defenders = positions.slice(1, 1 + (team.formation.split('-')[1] ? parseInt(team.formation.split('-')[1]) : 0));
-    const midfielders = positions.slice(1 + defenders.length, 1 + defenders.length + (team.formation.split('-')[2] ? parseInt(team.formation.split('-')[2]) : 0));
-    const forwards = positions.slice(1 + defenders.length + midfielders.length);
-    
-    // Sort players by their stats for each position
-    const sortedForDefense = [...assignments].sort((a, b) => calculatePlayerScore(b.participant, 'defend') - calculatePlayerScore(a.participant, 'defend'));
-    const sortedForMidfield = [...assignments].sort((a, b) => calculatePlayerScore(b.participant, 'pass') - calculatePlayerScore(a.participant, 'pass'));
-    const sortedForForward = [...assignments].sort((a, b) => calculatePlayerScore(b.participant, 'shoot') - calculatePlayerScore(a.participant, 'shoot'));
-    
-    const newPositions: Position[] = [];
-    const usedPlayers = new Set<string>();
-    
-    // Assign goalkeeper (first player available)
-    if (assignments.length > 0 && !usedPlayers.has(assignments[0].participantId)) {
-      newPositions.push({
-        id: `pos-${assignments[0].participantId}`,
-        teamId: team.id,
-        participantId: assignments[0].participantId,
-        x: goalkeeper.x,
-        y: teamIndex === 2 ? 1 - goalkeeper.y : goalkeeper.y // Invert for team 2
-      });
-      usedPlayers.add(assignments[0].participantId);
-    }
-    
-    // Assign defenders
-    let defenderIndex = 0;
-    for (const player of sortedForDefense) {
-      if (usedPlayers.has(player.participantId) || defenderIndex >= defenders.length) continue;
-      const pos = defenders[defenderIndex];
-      newPositions.push({
-        id: `pos-${player.participantId}`,
-        teamId: team.id,
-        participantId: player.participantId,
-        x: pos.x,
-        y: teamIndex === 2 ? 1 - pos.y : pos.y
-      });
-      usedPlayers.add(player.participantId);
-      defenderIndex++;
-    }
-    
-    // Assign midfielders
-    let midfielderIndex = 0;
-    for (const player of sortedForMidfield) {
-      if (usedPlayers.has(player.participantId) || midfielderIndex >= midfielders.length) continue;
-      const pos = midfielders[midfielderIndex];
-      newPositions.push({
-        id: `pos-${player.participantId}`,
-        teamId: team.id,
-        participantId: player.participantId,
-        x: pos.x,
-        y: teamIndex === 2 ? 1 - pos.y : pos.y
-      });
-      usedPlayers.add(player.participantId);
-      midfielderIndex++;
-    }
-    
-    // Assign forwards
-    let forwardIndex = 0;
-    for (const player of sortedForForward) {
-      if (usedPlayers.has(player.participantId) || forwardIndex >= forwards.length) continue;
-      const pos = forwards[forwardIndex];
-      newPositions.push({
-        id: `pos-${player.participantId}`,
-        teamId: team.id,
-        participantId: player.participantId,
-        x: pos.x,
-        y: teamIndex === 2 ? 1 - pos.y : pos.y
-      });
-      usedPlayers.add(player.participantId);
-      forwardIndex++;
-    }
-    
-    // Assign remaining players to available positions
-    const remainingPlayers = assignments.filter(a => !usedPlayers.has(a.participantId));
-    const remainingPositions = positions.filter(pos => !newPositions.some(np => np.x === pos.x && np.y === (teamIndex === 2 ? 1 - pos.y : pos.y)));
-    
-    for (let i = 0; i < Math.min(remainingPlayers.length, remainingPositions.length); i++) {
-      const player = remainingPlayers[i];
-      const pos = remainingPositions[i];
-      newPositions.push({
-        id: `pos-${player.participantId}`,
-        teamId: team.id,
-        participantId: player.participantId,
-        x: pos.x,
-        y: teamIndex === 2 ? 1 - pos.y : pos.y
-      });
-    }
-    
-    // Update positions via API
-    try {
-      await fetch(`/api/teams/${team.id}/positions/auto`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positions: newPositions })
-      });
-      
-      // Refresh positions
-      const freshPositions = await fetch(`/api/teams/${team.id}/positions`).then(r => r.json());
-      if (teamIndex === 1) setPosTeam1(freshPositions);
-      else setPosTeam2(freshPositions);
-    } catch (error) {
-      console.error('Auto positioning failed:', error);
-    }
-  };
-
   const refreshTeamData = async (eventId: string, tlist: Team[]) => {
     const t1 = tlist.find(t=>t.index===1);
     const t2 = tlist.find(t=>t.index===2);
@@ -390,11 +221,6 @@ export default function TeamsPage() {
       ]);
       setAsgnTeam1(a);
       setPosTeam1(p);
-      
-      // Auto-position team 1 if owner
-      if (isOwner && a.length > 0) {
-        await autoPositionTeam(1, a);
-      }
     }
     if (t2) {
       const [a, p] = await Promise.all([
@@ -403,11 +229,6 @@ export default function TeamsPage() {
       ]);
       setAsgnTeam2(a);
       setPosTeam2(p);
-      
-      // Auto-position team 2 if owner
-      if (isOwner && a.length > 0) {
-        await autoPositionTeam(2, a);
-      }
     }
   };
 
@@ -518,10 +339,6 @@ export default function TeamsPage() {
             }
           }
           await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
-          
-          // Auto-position the team after assignment
-          const updatedAssignments = await fetch(`/api/teams/${t.id}/assignments`).then(r=>r.json());
-          await autoPositionTeam(idx, updatedAssignments);
         } catch (error) {
           console.error('Assignment failed:', error);
         } finally {
@@ -655,16 +472,210 @@ export default function TeamsPage() {
     return <span title={`MVP Lv${b.level}`} className="ml-1 text-[10px]">🏅</span>;
   };
 
+  const getPlayerStats = async (participant: Participant) => {
+    if (participant.isGuest) {
+      // Default stats for guest players
+      return { pace: 3, shoot: 3, pass: 3, defend: 3 };
+    }
+    if (!participant.user?.id) {
+      return { pace: 1, shoot: 1, pass: 1, defend: 1 };
+    }
+    try {
+      const response = await fetch(`/api/users/${participant.user.id}/card`);
+      if (response.ok) {
+        const card = await response.json();
+        return {
+          pace: card.pace || 1,
+          shoot: card.shoot || 1,
+          pass: card.pass || 1,
+          defend: card.defend || 1
+        };
+      }
+    } catch (error) {
+      console.error('Failed to load player stats:', error);
+    }
+    return { pace: 1, shoot: 1, pass: 1, defend: 1 };
+  };
+
+  const calculateOptimalPositions = async (assignments: Assignment[], formation: string) => {
+    const preset = positionsForFormation(formation);
+    if (assignments.length === 0) return [];
+
+    // Get stats for all players
+    const playersWithStats = await Promise.all(
+      assignments.map(async (assignment) => {
+        const stats = await getPlayerStats(assignment.participant);
+        return { assignment, stats };
+      })
+    );
+
+    // Categorize positions by role
+    const positionsByRole = {
+      goalkeeper: preset.filter(p => p.role === 'goalkeeper'),
+      defender: preset.filter(p => p.role === 'defender'),
+      midfielder: preset.filter(p => p.role === 'midfielder'),
+      forward: preset.filter(p => p.role === 'forward')
+    };
+
+    // Sort players by their best stat for each role
+    const sortPlayersByRole = (players: typeof playersWithStats, statKey: keyof typeof players[0]['stats']) => {
+      return players.sort((a, b) => {
+        const aStat = a.stats[statKey];
+        const bStat = b.stats[statKey];
+        
+        if (aStat !== bStat) {
+          return bStat - aStat; // Higher stat first
+        }
+        
+        // Tiebreaker: average of other 3 stats
+        const aOtherStats = Object.values(a.stats).filter((_, i) => Object.keys(a.stats)[i] !== statKey);
+        const bOtherStats = Object.values(b.stats).filter((_, i) => Object.keys(b.stats)[i] !== statKey);
+        const aAvgOther = aOtherStats.reduce((sum, stat) => sum + stat, 0) / aOtherStats.length;
+        const bAvgOther = bOtherStats.reduce((sum, stat) => sum + stat, 0) / bOtherStats.length;
+        const aTotalScore = aStat + aAvgOther;
+        const bTotalScore = bStat + bAvgOther;
+        
+        if (Math.abs(aTotalScore - bTotalScore) < 0.001) {
+          // Random tiebreaker if still equal
+          return Math.random() - 0.5;
+        }
+        
+        return bTotalScore - aTotalScore;
+      });
+    };
+
+    const assignedPlayers = new Set<string>();
+    const result: { participantId: string; x: number; y: number; role: string }[] = [];
+
+    // Assign goalkeeper first (highest defend)
+    if (positionsByRole.goalkeeper.length > 0 && playersWithStats.length > 0) {
+      const sortedByDefend = sortPlayersByRole(playersWithStats, 'defend');
+      const goalkeeper = sortedByDefend.find(p => !assignedPlayers.has(p.assignment.participantId));
+      if (goalkeeper) {
+        const pos = positionsByRole.goalkeeper[0];
+        result.push({
+          participantId: goalkeeper.assignment.participantId,
+          x: pos.x,
+          y: pos.y,
+          role: 'goalkeeper'
+        });
+        assignedPlayers.add(goalkeeper.assignment.participantId);
+      }
+    }
+
+    // Assign forwards (highest shoot)
+    const availablePlayers = playersWithStats.filter(p => !assignedPlayers.has(p.assignment.participantId));
+    const sortedByShoot = sortPlayersByRole(availablePlayers, 'shoot');
+    for (let i = 0; i < Math.min(positionsByRole.forward.length, sortedByShoot.length); i++) {
+      const player = sortedByShoot[i];
+      const pos = positionsByRole.forward[i];
+      result.push({
+        participantId: player.assignment.participantId,
+        x: pos.x,
+        y: pos.y,
+        role: 'forward'
+      });
+      assignedPlayers.add(player.assignment.participantId);
+    }
+
+    // Assign midfielders (highest pass)
+    const remainingAfterForwards = playersWithStats.filter(p => !assignedPlayers.has(p.assignment.participantId));
+    const sortedByPass = sortPlayersByRole(remainingAfterForwards, 'pass');
+    for (let i = 0; i < Math.min(positionsByRole.midfielder.length, sortedByPass.length); i++) {
+      const player = sortedByPass[i];
+      const pos = positionsByRole.midfielder[i];
+      result.push({
+        participantId: player.assignment.participantId,
+        x: pos.x,
+        y: pos.y,
+        role: 'midfielder'
+      });
+      assignedPlayers.add(player.assignment.participantId);
+    }
+
+    // Assign defenders (highest defend)
+    const remainingAfterMidfielders = playersWithStats.filter(p => !assignedPlayers.has(p.assignment.participantId));
+    const sortedByDefend = sortPlayersByRole(remainingAfterMidfielders, 'defend');
+    for (let i = 0; i < Math.min(positionsByRole.defender.length, sortedByDefend.length); i++) {
+      const player = sortedByDefend[i];
+      const pos = positionsByRole.defender[i];
+      result.push({
+        participantId: player.assignment.participantId,
+        x: pos.x,
+        y: pos.y,
+        role: 'defender'
+      });
+      assignedPlayers.add(player.assignment.participantId);
+    }
+
+    // Assign any remaining players to available positions
+    const stillRemaining = playersWithStats.filter(p => !assignedPlayers.has(p.assignment.participantId));
+    const availablePositions = preset.filter((_, idx) => !result.some(r => {
+      const pos = preset[idx];
+      return Math.abs(r.x - pos.x) < 0.01 && Math.abs(r.y - pos.y) < 0.01;
+    }));
+    
+    for (let i = 0; i < Math.min(stillRemaining.length, availablePositions.length); i++) {
+      const player = stillRemaining[i];
+      const pos = availablePositions[i];
+      result.push({
+        participantId: player.assignment.participantId,
+        x: pos.x,
+        y: pos.y,
+        role: pos.role
+      });
+    }
+
+    return result;
+  };
+
   const HalfField = ({ team, asgn, pos, setPos }: { team?: Team; asgn: Assignment[]; pos: Position[]; setPos: Dispatch<SetStateAction<Position[]>> }) => {
     const fieldRef = useRef<HTMLDivElement | null>(null);
     const draggingRef = useRef<{ id: string } | null>(null);
     if (!team) return null;
+    
+    // Auto-position players when assignments change
+    useEffect(() => {
+      if (asgn.length > 0 && isOwner) {
+        calculateOptimalPositions(asgn, team.formation).then(optimalPositions => {
+          const newPositions = optimalPositions.map(op => ({
+            id: `auto-${op.participantId}`,
+            teamId: team.id,
+            participantId: op.participantId,
+            x: team.index === 2 ? op.x : op.x, // Team 2 gets inverted field
+            y: team.index === 2 ? 1 - op.y : op.y
+          }));
+          setPos(newPositions);
+          
+          // Save positions to backend if owner
+          if (isOwner) {
+            newPositions.forEach(async (position) => {
+              try {
+                await fetch(`/api/teams/${team.id}/positions`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    participantId: position.participantId,
+                    x: position.x,
+                    y: position.y
+                  })
+                });
+              } catch (error) {
+                console.error('Failed to save position:', error);
+              }
+            });
+          }
+        });
+      }
+    }, [asgn.length, team.formation, isOwner, team.id, team.index]);
+    
     const labelFor = (pid: string) => {
       const a = asgn.find(x=>x.participantId===pid);
       if (!a) return 'Player';
       if (a.participant.isGuest) return a.participant.guestName || 'Guest';
       return a.participant.user?.displayName || a.participant.user?.handle || 'Player';
     };
+    
     const tokenPos = (idx: number, pid: string) => {
       const p = pos.find(x=>x.participantId===pid);
       if (p) return { x: p.x, y: p.y };
@@ -786,7 +797,7 @@ export default function TeamsPage() {
           <button onClick={resetEvent} disabled={!isOwner} className="border px-3 py-1 rounded text-red-600 disabled:opacity-50">Reset Event</button>
         </div>
       </div>
-      <p className="text-sm text-gray-500">Assign players via → buttons or use Auto-balance. Only the creator can change teams and positions.</p>
+      <p className="text-sm text-gray-500">Assign players via → buttons. Players are automatically positioned based on their stats: Shoot→Forward, Pass→Midfielder, Defend→Defender. Only the creator can change teams and positions.</p>
       {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
       {/* Players Section - Top */}
