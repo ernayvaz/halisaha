@@ -869,7 +869,7 @@ export default function TeamsPage() {
             <h3 className="font-medium">Players</h3>
             <button 
               onClick={addGuest} 
-              disabled={addingGuest || !!eventData?.rosterLocked || !isOwner} 
+              disabled={addingGuest || !!eventData?.rosterLocked} 
               className="text-xs border rounded px-2 py-1 disabled:opacity-50 hover:bg-green-50 hover:border-green-300 transition-colors"
             >
               {addingGuest ? (
