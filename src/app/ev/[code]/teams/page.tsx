@@ -106,7 +106,31 @@ export default function TeamsPage() {
         fetch(`/api/events/${e.id}/teams`).then((r)=>r.json()),
         fetch('/api/me').then(r=>r.ok?r.json():null).catch(()=>null),
       ]);
-      setParticipants(plist); 
+      
+      // Enhance participants with user stats
+      const enhancedParticipants = await Promise.all(
+        plist.map(async (p: Participant) => {
+          if (!p.isGuest && p.user?.id) {
+            try {
+              const userStats = await fetch(`/api/users/${p.user.id}/card`).then(r => r.ok ? r.json() : null).catch(() => null);
+              if (userStats) {
+                return {
+                  ...p,
+                  user: {
+                    ...p.user,
+                    pace: userStats.pace,
+                    shoot: userStats.shoot,
+                    pass: userStats.pass,
+                    defend: userStats.defend
+                  }
+                };
+              }
+            } catch {}
+          }
+          return p;
+        })
+      );
+      setParticipants(enhancedParticipants); 
       
       // Ensure teams exist immediately
       let tlist = initialTlist;
@@ -210,6 +234,152 @@ export default function TeamsPage() {
     }
   };
 
+  const calculatePlayerScore = (participant: Participant, primaryStat: 'pace' | 'shoot' | 'pass' | 'defend') => {
+    if (participant.isGuest) {
+      // Default stats for guests
+      const stats = { pace: 3, shoot: 3, pass: 3, defend: 3 };
+      const primary = stats[primaryStat];
+      const others = Object.values(stats).filter((_, i) => Object.keys(stats)[i] !== primaryStat);
+      const otherAvg = others.reduce((sum, val) => sum + val, 0) / others.length;
+      return primary + otherAvg + Math.random() * 0.1; // Small random for tiebreaking
+    }
+    
+    if (!participant.user) return 0;
+    
+    const stats = {
+      pace: participant.user.pace || 1,
+      shoot: participant.user.shoot || 1,
+      pass: participant.user.pass || 1,
+      defend: participant.user.defend || 1
+    };
+    
+    const primary = stats[primaryStat];
+    const others = Object.values(stats).filter((_, i) => Object.keys(stats)[i] !== primaryStat);
+    const otherAvg = others.reduce((sum, val) => sum + val, 0) / others.length;
+    
+    return primary + otherAvg + Math.random() * 0.1; // Small random for tiebreaking
+  };
+
+  const autoPositionTeam = async (teamIndex: 1|2, assignments: Assignment[]) => {
+    if (!isOwner || !eventData) return;
+    
+    const team = teams.find(t => t.index === teamIndex);
+    if (!team || assignments.length === 0) return;
+    
+    // Get formation positions
+    const formationPositions = positionsForFormation(team.formation);
+    if (formationPositions.length === 0) return;
+    
+    // Categorize positions by role
+    const positions = formationPositions.map((pos, idx) => ({ ...pos, index: idx }));
+    
+    // Position 0 is always goalkeeper
+    const goalkeeper = positions[0];
+    const defenders = positions.slice(1, 1 + (team.formation.split('-')[1] ? parseInt(team.formation.split('-')[1]) : 0));
+    const midfielders = positions.slice(1 + defenders.length, 1 + defenders.length + (team.formation.split('-')[2] ? parseInt(team.formation.split('-')[2]) : 0));
+    const forwards = positions.slice(1 + defenders.length + midfielders.length);
+    
+    // Sort players by their stats for each position
+    const sortedForDefense = [...assignments].sort((a, b) => calculatePlayerScore(b.participant, 'defend') - calculatePlayerScore(a.participant, 'defend'));
+    const sortedForMidfield = [...assignments].sort((a, b) => calculatePlayerScore(b.participant, 'pass') - calculatePlayerScore(a.participant, 'pass'));
+    const sortedForForward = [...assignments].sort((a, b) => calculatePlayerScore(b.participant, 'shoot') - calculatePlayerScore(a.participant, 'shoot'));
+    
+    const newPositions: Position[] = [];
+    const usedPlayers = new Set<string>();
+    
+    // Assign goalkeeper (first player available)
+    if (assignments.length > 0 && !usedPlayers.has(assignments[0].participantId)) {
+      newPositions.push({
+        id: `pos-${assignments[0].participantId}`,
+        teamId: team.id,
+        participantId: assignments[0].participantId,
+        x: goalkeeper.x,
+        y: teamIndex === 2 ? 1 - goalkeeper.y : goalkeeper.y // Invert for team 2
+      });
+      usedPlayers.add(assignments[0].participantId);
+    }
+    
+    // Assign defenders
+    let defenderIndex = 0;
+    for (const player of sortedForDefense) {
+      if (usedPlayers.has(player.participantId) || defenderIndex >= defenders.length) continue;
+      const pos = defenders[defenderIndex];
+      newPositions.push({
+        id: `pos-${player.participantId}`,
+        teamId: team.id,
+        participantId: player.participantId,
+        x: pos.x,
+        y: teamIndex === 2 ? 1 - pos.y : pos.y
+      });
+      usedPlayers.add(player.participantId);
+      defenderIndex++;
+    }
+    
+    // Assign midfielders
+    let midfielderIndex = 0;
+    for (const player of sortedForMidfield) {
+      if (usedPlayers.has(player.participantId) || midfielderIndex >= midfielders.length) continue;
+      const pos = midfielders[midfielderIndex];
+      newPositions.push({
+        id: `pos-${player.participantId}`,
+        teamId: team.id,
+        participantId: player.participantId,
+        x: pos.x,
+        y: teamIndex === 2 ? 1 - pos.y : pos.y
+      });
+      usedPlayers.add(player.participantId);
+      midfielderIndex++;
+    }
+    
+    // Assign forwards
+    let forwardIndex = 0;
+    for (const player of sortedForForward) {
+      if (usedPlayers.has(player.participantId) || forwardIndex >= forwards.length) continue;
+      const pos = forwards[forwardIndex];
+      newPositions.push({
+        id: `pos-${player.participantId}`,
+        teamId: team.id,
+        participantId: player.participantId,
+        x: pos.x,
+        y: teamIndex === 2 ? 1 - pos.y : pos.y
+      });
+      usedPlayers.add(player.participantId);
+      forwardIndex++;
+    }
+    
+    // Assign remaining players to available positions
+    const remainingPlayers = assignments.filter(a => !usedPlayers.has(a.participantId));
+    const remainingPositions = positions.filter(pos => !newPositions.some(np => np.x === pos.x && np.y === (teamIndex === 2 ? 1 - pos.y : pos.y)));
+    
+    for (let i = 0; i < Math.min(remainingPlayers.length, remainingPositions.length); i++) {
+      const player = remainingPlayers[i];
+      const pos = remainingPositions[i];
+      newPositions.push({
+        id: `pos-${player.participantId}`,
+        teamId: team.id,
+        participantId: player.participantId,
+        x: pos.x,
+        y: teamIndex === 2 ? 1 - pos.y : pos.y
+      });
+    }
+    
+    // Update positions via API
+    try {
+      await fetch(`/api/teams/${team.id}/positions/auto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positions: newPositions })
+      });
+      
+      // Refresh positions
+      const freshPositions = await fetch(`/api/teams/${team.id}/positions`).then(r => r.json());
+      if (teamIndex === 1) setPosTeam1(freshPositions);
+      else setPosTeam2(freshPositions);
+    } catch (error) {
+      console.error('Auto positioning failed:', error);
+    }
+  };
+
   const refreshTeamData = async (eventId: string, tlist: Team[]) => {
     const t1 = tlist.find(t=>t.index===1);
     const t2 = tlist.find(t=>t.index===2);
@@ -220,6 +390,11 @@ export default function TeamsPage() {
       ]);
       setAsgnTeam1(a);
       setPosTeam1(p);
+      
+      // Auto-position team 1 if owner
+      if (isOwner && a.length > 0) {
+        await autoPositionTeam(1, a);
+      }
     }
     if (t2) {
       const [a, p] = await Promise.all([
@@ -228,6 +403,11 @@ export default function TeamsPage() {
       ]);
       setAsgnTeam2(a);
       setPosTeam2(p);
+      
+      // Auto-position team 2 if owner
+      if (isOwner && a.length > 0) {
+        await autoPositionTeam(2, a);
+      }
     }
   };
 
@@ -338,6 +518,10 @@ export default function TeamsPage() {
             }
           }
           await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
+          
+          // Auto-position the team after assignment
+          const updatedAssignments = await fetch(`/api/teams/${t.id}/assignments`).then(r=>r.json());
+          await autoPositionTeam(idx, updatedAssignments);
         } catch (error) {
           console.error('Assignment failed:', error);
         } finally {
