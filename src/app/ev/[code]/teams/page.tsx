@@ -22,14 +22,11 @@ export default function TeamsPage() {
   const [asgnTeam2, setAsgnTeam2] = useState<Assignment[]>([]);
   const [posTeam1, setPosTeam1] = useState<Position[]>([]);
   const [posTeam2, setPosTeam2] = useState<Position[]>([]);
-  const [assignmentsByTeam, setAssignmentsByTeam] = useState<Record<string, number>>({});
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [busy, setBusy] = useState(false);
-  const [addingGuest, setAddingGuest] = useState(false);
   const [optimisticUpdate, setOptimisticUpdate] = useState<any>(null);
   const [lastGuestAddedAt, setLastGuestAddedAt] = useState<number>(0);
-  const [guestOpen, setGuestOpen] = useState(false);
-  const [guestName, setGuestName] = useState('');
+  const [addingGuest, setAddingGuest] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
   const [playerCard, setPlayerCard] = useState<any>(null);
   const [debounceTimers, setDebounceTimers] = useState<Record<string, NodeJS.Timeout>>({});
@@ -53,12 +50,11 @@ export default function TeamsPage() {
     }
   };
 
-  function positionsForFormation(formation: string): { x:number; y:number; role: 'goalkeeper' | 'defender' | 'midfielder' | 'forward' }[] {
+  function positionsForFormation(formation: string): { x:number; y:number }[] {
     const parts = formation.split('-').map((n)=>parseInt(n,10));
     const a = parts[1]||0, b = parts[2]||0, c = parts[3]||0;
     // Rotated: y positions for vertical layout (goal top, midfield bottom)
     const ys = [0.28, 0.56, 0.86];
-    const roles = ['defender', 'midfielder', 'forward'] as const;
     const spread = (count: number): number[] => {
       if (count <= 0) return [];
       if (count === 1) return [0.5];
@@ -66,12 +62,12 @@ export default function TeamsPage() {
       for (let i=0;i<count;i++) xs.push(0.2 + (i*(0.6/(count-1))));
       return xs;
     };
-    const out: {x:number;y:number; role: 'goalkeeper' | 'defender' | 'midfielder' | 'forward'}[] = [];
+    const out: {x:number;y:number}[] = [];
     // Goalkeeper at top center
-    out.push({ x: 0.5, y: 0.14, role: 'goalkeeper' });
+    out.push({ x: 0.5, y: 0.14 });
     [a,b,c].forEach((cnt, idx)=>{
       const xs = spread(cnt);
-      xs.forEach((x)=>out.push({ x, y: ys[idx], role: roles[idx] }));
+      xs.forEach((x)=>out.push({ x, y: ys[idx] }));
     });
     return out;
   }
@@ -126,12 +122,7 @@ export default function TeamsPage() {
         const mine = plist.find((p: Participant)=>p.user?.id === me.id);
         setIsOwner(mine?.role === 'owner');
       } else setIsOwner(false);
-      const counts = Object.fromEntries(await Promise.all(tlist.map(async (t: Team)=>{
-        const asg = await fetch(`/api/teams/${t.id}/assignments`).then(r=>r.json());
-        return [t.id, asg.length];
-      })));
-      setAssignmentsByTeam(counts);
-      await ensureFormationIfMissing(e.id, tlist, counts);
+      await ensureFormationIfMissing(e.id, tlist, {});
       await refreshTeamData(e.id, tlist);
     };
     run();
@@ -140,8 +131,8 @@ export default function TeamsPage() {
     (async () => {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
       eventUnsubRef.current = subscribe(e.id, (evt: RealtimeEvent) => {
-        // Skip updates during optimistic windows to prevent assignment resets, but allow non-assignment updates
-        if (optimisticUpdate && Date.now() - optimisticUpdate < 1500 && (evt.type === 'assignments_updated' || evt.type === 'teams_updated')) return;
+        // Skip updates during optimistic windows to prevent assignment resets
+        if (optimisticUpdate && Date.now() - optimisticUpdate < 1500) return;
         if (lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000) return;
         
         if (evt.type === 'participants_updated') {
@@ -153,12 +144,6 @@ export default function TeamsPage() {
             // Rewire team-level subscriptions on team changes
             setupTeamSubscriptions(tlist);
           })().catch(()=>{});
-        } else if (evt.type === 'assignments_updated') {
-          // handled by team-level subscriptions as well; keep as fallback
-          setTimeout(() => {
-            if (team1?.id) fetch(`/api/teams/${team1.id}/assignments`).then(r=>r.json()).then(setAsgnTeam1).catch(()=>{});
-            if (team2?.id) fetch(`/api/teams/${team2.id}/assignments`).then(r=>r.json()).then(setAsgnTeam2).catch(()=>{});
-          }, 100);
         } else if (evt.type === 'positions_updated') {
           if (team1?.id) fetch(`/api/teams/${team1.id}/positions`).then(r=>r.json()).then(setPosTeam1).catch(()=>{});
           if (team2?.id) fetch(`/api/teams/${team2.id}/positions`).then(r=>r.json()).then(setPosTeam2).catch(()=>{});
@@ -186,11 +171,7 @@ export default function TeamsPage() {
     for (const t of tlist) {
       if (!current[t.id]) {
         current[t.id] = subscribe(t.id, (evt: RealtimeEvent) => {
-          if (evt.type === 'assignments_updated' && evt.teamId === t.id) {
-            fetch(`/api/teams/${t.id}/assignments`).then(r=>r.json()).then((list)=>{
-              if (t.index===1) setAsgnTeam1(list); else setAsgnTeam2(list);
-            }).catch(()=>{});
-          } else if (evt.type === 'positions_updated' && evt.teamId === t.id) {
+          if (evt.type === 'positions_updated' && evt.teamId === t.id) {
             fetch(`/api/teams/${t.id}/positions`).then(r=>r.json()).then((list)=>{
               if (t.index===1) setPosTeam1(list); else setPosTeam2(list);
             }).catch(()=>{});
@@ -216,19 +197,15 @@ export default function TeamsPage() {
     const t1 = tlist.find(t=>t.index===1);
     const t2 = tlist.find(t=>t.index===2);
     if (t1) {
-      const [a, p] = await Promise.all([
-        fetch(`/api/teams/${t1.id}/assignments`).then(r=>r.json()),
+      const [p] = await Promise.all([
         fetch(`/api/teams/${t1.id}/positions`).then(r=>r.json()),
       ]);
-      setAsgnTeam1(a);
       setPosTeam1(p);
     }
     if (t2) {
-      const [a, p] = await Promise.all([
-        fetch(`/api/teams/${t2.id}/assignments`).then(r=>r.json()),
+      const [p] = await Promise.all([
         fetch(`/api/teams/${t2.id}/positions`).then(r=>r.json()),
       ]);
-      setAsgnTeam2(a);
       setPosTeam2(p);
     }
   };
@@ -266,6 +243,39 @@ export default function TeamsPage() {
     setBusy(false);
   };
 
+  const addGuest = async () => {
+    if (!eventData) return;
+    // Determine next sequential guest name from current list
+    const existingGuests = participants.filter(p => p.isGuest);
+    const nextNumber = (() => {
+      const numbers = existingGuests.map(p => {
+        const m = /^Guest\s+(\d+)$/.exec(p.guestName || '');
+        return m ? parseInt(m[1], 10) : 0;
+      }).filter(n => n > 0);
+      return numbers.length ? Math.max(...numbers) + 1 : 1;
+    })();
+    const name = `Guest ${nextNumber}`;
+
+    // Optimistic local insert
+    const tmpId = `tmp-${Date.now()}`;
+    const tmpGuest: Participant = { id: tmpId, isGuest: true, guestName: name, user: undefined };
+    setParticipants(prev => [...prev, tmpGuest]);
+    setAddingGuest(true);
+    try {
+      const r = await fetch(`/api/events/${eventData.id}/participants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'join', guestName: name }) });
+      if (!r.ok) throw new Error('guest_create_failed');
+      const created = await r.json();
+      setParticipants(prev => prev.map(p => p.id === tmpId ? created : p));
+      setLastGuestAddedAt(Date.now());
+    } catch (e) {
+      // Revert on failure
+      setParticipants(prev => prev.filter(p => p.id !== tmpId));
+      console.error('Guest creation error:', e);
+    } finally {
+      setAddingGuest(false);
+    }
+  };
+
   const toggleRosterLock = async () => {
     if (!eventData || !isOwner) return;
     const r = await fetch(`/api/events/${eventData.id}/flags`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterLocked: !eventData.rosterLocked }) });
@@ -287,170 +297,32 @@ export default function TeamsPage() {
       ]);
       setParticipants(plist);
       setTeams(tlist);
-      const counts = Object.fromEntries(await Promise.all(tlist.map(async (t: Team)=>{
-        const asg = await fetch(`/api/teams/${t.id}/assignments`).then(r=>r.json());
-        return [t.id, asg.length];
-      })));
-      setAssignmentsByTeam(counts);
       await refreshTeamData(eventData.id, tlist);
     }
     setBusy(false);
   };
 
-  const assign = (idx: 1|2, participantId: string) => {
-    const t = team(idx);
-    if (!t) return;
-    
-    // Check if player is already in the selected team
-    const from1 = asgnTeam1.find(a=>a.participantId===participantId);
-    const from2 = asgnTeam2.find(a=>a.participantId===participantId);
-    const participant = participants.find(p=>p.id===participantId);
-    if (!participant) return;
-    
-    // If player is already in the selected team, do nothing
-    if ((idx === 1 && from1) || (idx === 2 && from2)) return;
-    
-    // Immediate UI feedback for all users
-    const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
-    
-    setOptimisticUpdate(Date.now());
-    if (idx === 1) {
-      setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
-      if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
-    } else {
-      setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
-      if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
-    }
-    
-    // Counts will be updated by useEffect below
-
-    if (isOwner) {
-      // Debounced API call for owners
-      const key = `assign-${participantId}`;
-      if (debounceTimers[key]) {
-        clearTimeout(debounceTimers[key]);
-      }
-      
-      const timer = setTimeout(async () => {
-        try {
-          if (from1 || from2) {
-            const otherTeamId = from1 ? team1?.id : team2?.id;
-            if (otherTeamId) {
-              await fetch(`/api/teams/${otherTeamId}/assignments?participantId=${participantId}`, { method: 'DELETE' });
-            }
-          }
-          await fetch(`/api/teams/${t.id}/assignments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ participantId }) });
-        } catch (error) {
-          console.error('Assignment failed:', error);
-        } finally {
-          setTimeout(()=>setOptimisticUpdate(null), 200);
-        }
-      }, 300); // 300ms debounce
-      
-      setDebounceTimers(prev => ({ ...prev, [key]: timer }));
-    }
-  };
-
-  const addGuest = async () => {
-    if (!eventData) return;
-    
-    // Generate sequential guest name
-    const existingGuests = participants.filter(p => p.isGuest);
-    const guestNumbers = existingGuests.map(p => {
-      const match = p.guestName?.match(/^Guest (\d+)$/);
-      return match ? parseInt(match[1], 10) : 0;
-    }).filter(n => n > 0);
-    
-    const nextNumber = guestNumbers.length > 0 ? Math.max(...guestNumbers) + 1 : 1;
-    const guestName = `Guest ${nextNumber}`;
-    
-    // Optimistically add temp guest
-    const tmpId = `tmp-${Date.now()}`;
-    const tmpGuest: Participant = { 
-      id: tmpId, 
-      isGuest: true, 
-      guestName, 
-      user: undefined 
-    };
-    setParticipants(prev => Array.isArray(prev) ? [...prev, tmpGuest] : [tmpGuest]);
-    setAddingGuest(true);
-    
-    try {
-      const response = await fetch(`/api/events/${eventData.id}/participants`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'join', guestName })
-      });
-      
-      if (!response.ok) throw new Error('Guest creation failed');
-      
-      const created = await response.json();
-      // Replace temp guest with real record
-      setParticipants(prev => prev.map(p => p.id === tmpId ? created : p));
-      setLastGuestAddedAt(Date.now());
-    } catch (error) {
-      console.error('Guest creation error:', error);
-      // Remove temp guest on error
-      setParticipants(prev => prev.filter(p => p.id !== tmpId));
-    } finally {
-      setAddingGuest(false);
-    }
-  };
-
-  const removePlayer = async (participantId: string) => {
-    if (!eventData) return;
-    if (!confirm('Remove this player from the event?')) return;
-    
-    try {
-      // Remove from both teams
-      await fetch(`/api/teams/${team1?.id}/assignments?participantId=${participantId}`, { method:'DELETE' }).catch(()=>{});
-      await fetch(`/api/teams/${team2?.id}/assignments?participantId=${participantId}`, { method:'DELETE' }).catch(()=>{});
-      
-      // Remove participant from event
-      await fetch(`/api/events/${eventData.id}/participants/${participantId}`, { method:'DELETE' });
-      
-      // Refresh participants list
-      const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json());
-      setParticipants(plist);
-    } catch (error) {
-      console.error('Failed to remove player:', error);
-    }
-  };
-
   const team1 = useMemo(()=>team(1), [teams]);
   const team2 = useMemo(()=>team(2), [teams]);
-  const size1 = team1 ? (assignmentsByTeam[team1.id] || 0) : 0;
-  const size2 = team2 ? (assignmentsByTeam[team2.id] || 0) : 0;
-
-  // Auto-update assignment counts when assignments change
-  useEffect(() => {
-    if (team1 && team2) {
-      setAssignmentsByTeam(prev => ({
-        ...prev,
-        [team1.id]: asgnTeam1.length,
-        [team2.id]: asgnTeam2.length
-      }));
-    }
-  }, [asgnTeam1.length, asgnTeam2.length, team1?.id, team2?.id]);
 
   // Auto-update formations when team sizes change
   useEffect(() => {
     if (!isOwner || !eventData) return;
     
-    const updateFormationIfNeeded = async (team: Team, currentSize: number) => {
-      const autoFormation = getAutoFormation(currentSize);
+    const updateFormationIfNeeded = async (team: Team) => {
+      const autoFormation = getAutoFormation(team.formation.split('-').map(n=>parseInt(n,10)).reduce((sum,n)=>sum+n,0));
       if (team.formation !== autoFormation) {
         await upsertTeam(team.index as 1|2, { formation: autoFormation });
       }
     };
 
-    if (team1 && size1 > 0) {
-      updateFormationIfNeeded(team1, size1);
+    if (team1) {
+      updateFormationIfNeeded(team1);
     }
-    if (team2 && size2 > 0) {
-      updateFormationIfNeeded(team2, size2);
+    if (team2) {
+      updateFormationIfNeeded(team2);
     }
-  }, [size1, size2, team1?.id, team2?.id, isOwner, eventData?.id]);
+  }, [team1?.id, team2?.id, isOwner, eventData?.id]);
 
   const getAutoFormation = (playerCount: number): string => {
     // Always goalkeeper first, then distribute symmetrically
@@ -519,210 +391,16 @@ export default function TeamsPage() {
     return <span title={`MVP Lv${b.level}`} className="ml-1 text-[10px]">🏅</span>;
   };
 
-  const getPlayerStats = async (participant: Participant) => {
-    if (participant.isGuest) {
-      // Default stats for guest players
-      return { pace: 2, shoot: 2, pass: 2, defend: 2 };
-    }
-    if (!participant.user?.id) {
-      return { pace: 1, shoot: 1, pass: 1, defend: 1 };
-    }
-    try {
-      const response = await fetch(`/api/users/${participant.user.id}/card`);
-      if (response.ok) {
-        const card = await response.json();
-        return {
-          pace: card.pace || 1,
-          shoot: card.shoot || 1,
-          pass: card.pass || 1,
-          defend: card.defend || 1
-        };
-      }
-    } catch (error) {
-      console.error('Failed to load player stats:', error);
-    }
-    return { pace: 1, shoot: 1, pass: 1, defend: 1 };
-  };
-
-  const calculateOptimalPositions = async (assignments: Assignment[], formation: string) => {
-    const preset = positionsForFormation(formation);
-    if (assignments.length === 0) return [];
-
-    // Get stats for all players
-    const playersWithStats = await Promise.all(
-      assignments.map(async (assignment) => {
-        const stats = await getPlayerStats(assignment.participant);
-        return { assignment, stats };
-      })
-    );
-
-    // Categorize positions by role
-    const positionsByRole = {
-      goalkeeper: preset.filter(p => p.role === 'goalkeeper'),
-      defender: preset.filter(p => p.role === 'defender'),
-      midfielder: preset.filter(p => p.role === 'midfielder'),
-      forward: preset.filter(p => p.role === 'forward')
-    };
-
-    // Sort players by their best stat for each role
-    const sortPlayersByRole = (players: typeof playersWithStats, statKey: keyof typeof players[0]['stats']) => {
-      return players.sort((a, b) => {
-        const aStat = a.stats[statKey];
-        const bStat = b.stats[statKey];
-        
-        if (aStat !== bStat) {
-          return bStat - aStat; // Higher stat first
-        }
-        
-        // Tiebreaker: average of other 3 stats
-        const aOtherStats = Object.values(a.stats).filter((_, i) => Object.keys(a.stats)[i] !== statKey);
-        const bOtherStats = Object.values(b.stats).filter((_, i) => Object.keys(b.stats)[i] !== statKey);
-        const aAvgOther = aOtherStats.reduce((sum, stat) => sum + stat, 0) / aOtherStats.length;
-        const bAvgOther = bOtherStats.reduce((sum, stat) => sum + stat, 0) / bOtherStats.length;
-        const aTotalScore = aStat + aAvgOther;
-        const bTotalScore = bStat + bAvgOther;
-        
-        if (Math.abs(aTotalScore - bTotalScore) < 0.001) {
-          // Random tiebreaker if still equal
-          return Math.random() - 0.5;
-        }
-        
-        return bTotalScore - aTotalScore;
-      });
-    };
-
-    const assignedPlayers = new Set<string>();
-    const result: { participantId: string; x: number; y: number; role: string }[] = [];
-
-    // Assign goalkeeper first (highest defend)
-    if (positionsByRole.goalkeeper.length > 0 && playersWithStats.length > 0) {
-      const sortedByDefend = sortPlayersByRole(playersWithStats, 'defend');
-      const goalkeeper = sortedByDefend.find(p => !assignedPlayers.has(p.assignment.participantId));
-      if (goalkeeper) {
-        const pos = positionsByRole.goalkeeper[0];
-        result.push({
-          participantId: goalkeeper.assignment.participantId,
-          x: pos.x,
-          y: pos.y,
-          role: 'goalkeeper'
-        });
-        assignedPlayers.add(goalkeeper.assignment.participantId);
-      }
-    }
-
-    // Assign forwards (highest shoot)
-    const availablePlayers = playersWithStats.filter(p => !assignedPlayers.has(p.assignment.participantId));
-    const sortedByShoot = sortPlayersByRole(availablePlayers, 'shoot');
-    for (let i = 0; i < Math.min(positionsByRole.forward.length, sortedByShoot.length); i++) {
-      const player = sortedByShoot[i];
-      const pos = positionsByRole.forward[i];
-      result.push({
-        participantId: player.assignment.participantId,
-        x: pos.x,
-        y: pos.y,
-        role: 'forward'
-      });
-      assignedPlayers.add(player.assignment.participantId);
-    }
-
-    // Assign midfielders (highest pass)
-    const remainingAfterForwards = playersWithStats.filter(p => !assignedPlayers.has(p.assignment.participantId));
-    const sortedByPass = sortPlayersByRole(remainingAfterForwards, 'pass');
-    for (let i = 0; i < Math.min(positionsByRole.midfielder.length, sortedByPass.length); i++) {
-      const player = sortedByPass[i];
-      const pos = positionsByRole.midfielder[i];
-      result.push({
-        participantId: player.assignment.participantId,
-        x: pos.x,
-        y: pos.y,
-        role: 'midfielder'
-      });
-      assignedPlayers.add(player.assignment.participantId);
-    }
-
-    // Assign defenders (highest defend)
-    const remainingAfterMidfielders = playersWithStats.filter(p => !assignedPlayers.has(p.assignment.participantId));
-    const sortedByDefend = sortPlayersByRole(remainingAfterMidfielders, 'defend');
-    for (let i = 0; i < Math.min(positionsByRole.defender.length, sortedByDefend.length); i++) {
-      const player = sortedByDefend[i];
-      const pos = positionsByRole.defender[i];
-      result.push({
-        participantId: player.assignment.participantId,
-        x: pos.x,
-        y: pos.y,
-        role: 'defender'
-      });
-      assignedPlayers.add(player.assignment.participantId);
-    }
-
-    // Assign any remaining players to available positions
-    const stillRemaining = playersWithStats.filter(p => !assignedPlayers.has(p.assignment.participantId));
-    const availablePositions = preset.filter((_, idx) => !result.some(r => {
-      const pos = preset[idx];
-      return Math.abs(r.x - pos.x) < 0.01 && Math.abs(r.y - pos.y) < 0.01;
-    }));
-    
-    for (let i = 0; i < Math.min(stillRemaining.length, availablePositions.length); i++) {
-      const player = stillRemaining[i];
-      const pos = availablePositions[i];
-      result.push({
-        participantId: player.assignment.participantId,
-        x: pos.x,
-        y: pos.y,
-        role: pos.role
-      });
-    }
-
-    return result;
-  };
-
-  const HalfField = ({ team, asgn, pos, setPos }: { team?: Team; asgn: Assignment[]; pos: Position[]; setPos: Dispatch<SetStateAction<Position[]>> }) => {
+  const HalfField = ({ team, pos, setPos }: { team?: Team; pos: Position[]; setPos: Dispatch<SetStateAction<Position[]>> }) => {
     const fieldRef = useRef<HTMLDivElement | null>(null);
     const draggingRef = useRef<{ id: string } | null>(null);
     if (!team) return null;
-    
-    // Auto-position players when assignments change
-    useEffect(() => {
-      if (asgn.length > 0 && isOwner) {
-        calculateOptimalPositions(asgn, team.formation).then(optimalPositions => {
-          const newPositions = optimalPositions.map(op => ({
-            id: `auto-${op.participantId}`,
-            teamId: team.id,
-            participantId: op.participantId,
-            x: team.index === 2 ? op.x : op.x, // Team 2 gets inverted field
-            y: team.index === 2 ? 1 - op.y : op.y
-          }));
-          setPos(newPositions);
-          
-          // Save positions to backend if owner
-          if (isOwner) {
-            newPositions.forEach(async (position) => {
-              try {
-                await fetch(`/api/teams/${team.id}/positions`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    participantId: position.participantId,
-                    x: position.x,
-                    y: position.y
-                  })
-                });
-              } catch (error) {
-                console.error('Failed to save position:', error);
-              }
-            });
-          }
-        });
-      }
-    }, [asgn.length, team.formation, isOwner, team.id, team.index]);
-    
     const labelFor = (pid: string) => {
-      const a = asgn.find(x=>x.participantId===pid);
+      const a = asgnTeam1.find(x=>x.participantId===pid);
       if (!a) return 'Player';
       if (a.participant.isGuest) return a.participant.guestName || 'Guest';
       return a.participant.user?.displayName || a.participant.user?.handle || 'Player';
     };
-    
     const tokenPos = (idx: number, pid: string) => {
       const p = pos.find(x=>x.participantId===pid);
       if (p) return { x: p.x, y: p.y };
@@ -804,7 +482,7 @@ export default function TeamsPage() {
           </>
         )}
 
-        {asgn.map((a, i)=>{
+        {asgnTeam1.map((a, i)=>{
           const posi = tokenPos(i, a.participantId);
           const label = labelFor(a.participantId);
           const part = a.participant;
@@ -844,17 +522,15 @@ export default function TeamsPage() {
           <button onClick={resetEvent} disabled={!isOwner} className="border px-3 py-1 rounded text-red-600 disabled:opacity-50">Reset Event</button>
         </div>
       </div>
+      <p className="text-sm text-gray-500">Assign players via → buttons or use Auto-balance. Only the creator can change teams and positions.</p>
+      {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
       {/* Players Section - Top */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            <button 
-              onClick={addGuest} 
-              disabled={addingGuest || eventData?.rosterLocked} 
-              className="text-xs border rounded px-2 py-1 disabled:opacity-50 hover:bg-gray-50"
-            >
+            <button onClick={addGuest} disabled={addingGuest || !!eventData?.rosterLocked} className="text-xs border rounded px-2 py-1 disabled:opacity-50 hover:bg-gray-50">
               {addingGuest ? 'Adding...' : '+1 Guest'}
             </button>
           </div>
@@ -874,37 +550,6 @@ export default function TeamsPage() {
                   )}
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
-                <div className="flex gap-2">
-                  {(() => { 
-                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                    const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
-                    const teamName = team1?.name || 'Team 1';
-                    return <button 
-                      onClick={()=>assign(1,p.id)} 
-                      className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                      style={{ backgroundColor: c, color: textColorFor(c) }}
-                      disabled={inTeam1}
-                    >
-                      {teamName}
-                    </button>; 
-                  })()}
-                  {(() => { 
-                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                    const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
-                    const teamName = team2?.name || 'Team 2';
-                    return <button 
-                      onClick={()=>assign(2,p.id)} 
-                      className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                      style={{ backgroundColor: c, color: textColorFor(c) }}
-                      disabled={inTeam2}
-                    >
-                      {teamName}
-                    </button>; 
-                  })()}
-                  {isOwner && <button onClick={()=>removePlayer(p.id)} className="text-xs border rounded px-2 py-1 text-red-600 hover:bg-red-50">Remove</button>}
-                </div>
               </li>
             ))}
           </ul>
@@ -932,11 +577,11 @@ export default function TeamsPage() {
               </div>
               <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team1?.name||''} onBlur={(e)=>upsertTeam(1,{name:e.target.value||'Team 1'})} />
               <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team1?.formation||''} onChange={(e)=>upsertTeam(1,{formation:e.target.value})}>
-                {optionsForSize(size1).map(o=> (
+                {optionsForSize(0).map(o=> (
                   <option key={o.v} value={o.v}>{o.label}</option>
                 ))}
               </select>
-              <p className="text-[10px] text-gray-500">Players: {size1}</p>
+              <p className="text-[10px] text-gray-500">Players: {team1?.formation.split('-').map(n=>parseInt(n,10)).reduce((sum,n)=>sum+n,0)}</p>
             </div>
               
             {/* Team 1 Right: Roster */}
@@ -946,7 +591,6 @@ export default function TeamsPage() {
                 {asgnTeam1.map(a=> (
                   <li key={a.id} className="py-1 text-xs flex justify-between items-center">
                     <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                    {isOwner && <button className="text-xs border rounded px-1 py-0.5 text-red-600 hover:bg-red-50" onClick={async()=>{ await fetch(`/api/teams/${team1!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>×</button>}
                   </li>
                 ))}
               </ul>
@@ -955,7 +599,7 @@ export default function TeamsPage() {
           
           {/* Team 1 Field - matching height */}
           <div className="h-48">
-            <HalfField team={team1} asgn={asgnTeam1} pos={posTeam1} setPos={setPosTeam1} />
+            <HalfField team={team1} pos={posTeam1} setPos={setPosTeam1} />
           </div>
         </div>
 
@@ -963,7 +607,7 @@ export default function TeamsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Team 2 Field - matching height */}
           <div className="h-48">
-            <HalfField team={team2} asgn={asgnTeam2} pos={posTeam2} setPos={setPosTeam2} />
+            <HalfField team={team2} pos={posTeam2} setPos={setPosTeam2} />
           </div>
           
           {/* Team 2 Box */}
@@ -976,11 +620,11 @@ export default function TeamsPage() {
               </div>
               <input disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" placeholder="Team name" defaultValue={team2?.name||''} onBlur={(e)=>upsertTeam(2,{name:e.target.value||'Team 2'})} />
               <select disabled={!isOwner} className="border rounded p-2 w-full disabled:opacity-50" value={team2?.formation||''} onChange={(e)=>upsertTeam(2,{formation:e.target.value})}>
-                {optionsForSize(size2).map(o=> (
+                {optionsForSize(0).map(o=> (
                   <option key={o.v} value={o.v}>{o.label}</option>
                 ))}
               </select>
-              <p className="text-[10px] text-gray-500">Players: {size2}</p>
+              <p className="text-[10px] text-gray-500">Players: {team2?.formation.split('-').map(n=>parseInt(n,10)).reduce((sum,n)=>sum+n,0)}</p>
             </div>
               
             {/* Team 2 Right: Roster */}
@@ -990,7 +634,6 @@ export default function TeamsPage() {
                 {asgnTeam2.map(a=> (
                   <li key={a.id} className="py-1 text-xs flex justify-between items-center">
                     <span>{a.participant.isGuest ? (a.participant.guestName||'Guest Player') : (a.participant.user?.displayName || a.participant.user?.handle)}</span>
-                    {isOwner && <button className="text-xs border rounded px-1 py-0.5 text-red-600 hover:bg-red-50" onClick={async()=>{ await fetch(`/api/teams/${team2!.id}/assignments?participantId=${a.participantId}`, { method:'DELETE' }); const plist = await fetch(`/api/events/${eventData!.id}/participants`).then(r=>r.json()); setParticipants(plist); await refreshTeamData(eventData!.id, teams); }}>×</button>}
                   </li>
                 ))}
               </ul>
@@ -999,124 +642,193 @@ export default function TeamsPage() {
         </div>
       </section>
 
-      {/* Modern Dark Player Card Modal */}
+      {/* Modern Player Card Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
-          <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl max-w-sm w-full transform transition-all" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="relative px-6 py-4 border-b border-gray-700">
+            <div className="relative bg-gradient-to-br from-blue-600 to-purple-700 px-6 py-8 text-white">
               <button 
                 onClick={() => setSelectedPlayer(null)} 
-                className="absolute top-3 right-3 w-6 h-6 rounded-full hover:bg-gray-700 flex items-center justify-center transition-colors"
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
               
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 text-white text-lg font-bold flex items-center justify-center ring-2 ring-green-400/30">
+              <div className="text-center">
+                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm text-white text-3xl font-bold flex items-center justify-center mx-auto mb-3 ring-4 ring-white/30">
                   {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
                 </div>
-                <div>
-                  <h4 className="font-semibold text-white text-lg">
-                    {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
-                  </h4>
-                  {(selectedPlayer as any).role === 'owner' && (
-                    <span className="inline-flex items-center gap-1 bg-yellow-500 text-black px-2 py-1 rounded-full text-xs font-bold">
-                      ⚡ Owner
-                    </span>
-                  )}
-                </div>
+                <h4 className="text-xl font-bold mb-1">
+                  {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
+                </h4>
+                {(selectedPlayer as any).role === 'owner' && (
+                  <div className="inline-flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-medium">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd" />
+                    </svg>
+                    Owner
+          </div>
+                )}
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-6 bg-gray-900">
+            <div className="p-6">
                              {selectedPlayer.isGuest ? (
-                 <div className="space-y-4">
-                   {/* Guest Stats */}
-                   <div className="grid grid-cols-2 gap-3">
-                     <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-red-400 mb-1">2</div>
-                       <div className="text-xs text-gray-400 uppercase tracking-wide">Pace</div>
+                 <div className="space-y-6">
+                   {/* Guest Stats Grid */}
+                   <div className="grid grid-cols-2 gap-4">
+                     {/* Pace */}
+                     <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-red-700 font-medium mb-1">Pace</p>
+                       <p className="text-2xl font-bold text-red-800">3</p>
                      </div>
-                     <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-orange-400 mb-1">2</div>
-                       <div className="text-xs text-gray-400 uppercase tracking-wide">Shoot</div>
+                     
+                     {/* Shoot */}
+                     <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 3v10a2 2 0 002 2h6a2 2 0 002-2V7H7z" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-orange-700 font-medium mb-1">Shoot</p>
+                       <p className="text-2xl font-bold text-orange-800">3</p>
                      </div>
-                     <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-blue-400 mb-1">2</div>
-                       <div className="text-xs text-gray-400 uppercase tracking-wide">Pass</div>
+                     
+                     {/* Pass */}
+                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-blue-700 font-medium mb-1">Pass</p>
+                       <p className="text-2xl font-bold text-blue-800">3</p>
                      </div>
-                     <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-green-400 mb-1">2</div>
-                       <div className="text-xs text-gray-400 uppercase tracking-wide">Defend</div>
+                     
+                     {/* Defend */}
+                     <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.031 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-green-700 font-medium mb-1">Defend</p>
+                       <p className="text-2xl font-bold text-green-800">3</p>
                      </div>
                    </div>
-                   <div className="text-center pt-3 border-t border-gray-700">
-                     <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-2 rounded-full inline-flex items-center gap-2">
-                       <span className="text-sm font-medium">Overall</span>
-                       <span className="text-lg font-bold">2.0</span>
-                       <span className="text-sm opacity-80">/5</span>
-                       <span className="text-xs ml-2 bg-white/20 px-2 py-1 rounded">Right Foot</span>
+                   
+                   {/* Overall Rating */}
+                   <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-4 text-white text-center">
+                     <p className="text-sm opacity-90 mb-1">Overall Rating</p>
+                     <p className="text-3xl font-bold">12</p>
+                   </div>
+                   
+                   {/* Preferred Foot */}
+                   <div className="bg-gray-50 rounded-xl p-4 text-center">
+                     <div className="flex items-center justify-center mb-2">
+                       <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                       </svg>
                      </div>
+                     <p className="text-sm text-gray-600 font-medium mb-1">Preferred Foot</p>
+                     <p className="text-lg font-semibold text-gray-800">Right</p>
                    </div>
                  </div>
                ) : playerCard ? (
-                 <div className="space-y-4">
-                   {/* Player Stats */}
-                   <div className="grid grid-cols-2 gap-3">
-                     <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-red-400 mb-1">{playerCard.pace || 1}</div>
-                       <div className="text-xs text-gray-400 uppercase tracking-wide">Pace</div>
-                     </div>
-                     <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-orange-400 mb-1">{playerCard.shoot || 1}</div>
-                       <div className="text-xs text-gray-400 uppercase tracking-wide">Shoot</div>
-                     </div>
-                     <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-blue-400 mb-1">{playerCard.pass || 1}</div>
-                       <div className="text-xs text-gray-400 uppercase tracking-wide">Pass</div>
-                     </div>
-                     <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-green-400 mb-1">{playerCard.defend || 1}</div>
-                       <div className="text-xs text-gray-400 uppercase tracking-wide">Defend</div>
-                     </div>
-                   </div>
-                   <div className="text-center pt-3 border-t border-gray-700">
-                     <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-2 rounded-full inline-flex items-center gap-2">
-                       <span className="text-sm font-medium">Overall</span>
-                       <span className="text-lg font-bold">
-                         {Math.round(((playerCard.pace || 1) + (playerCard.shoot || 1) + (playerCard.pass || 1) + (playerCard.defend || 1)) / 4 * 10) / 10}
-                       </span>
-                       <span className="text-sm opacity-80">/5</span>
-                     </div>
-                   </div>
-                   {playerCard.foot && (
-                     <div className="text-center pt-2">
-                       <span className="text-xs text-gray-400 bg-gray-800 px-3 py-1 rounded-full">
-                         {playerCard.foot === 'L' ? '👈 Left Foot' : '👉 Right Foot'}
-                       </span>
-                     </div>
-                   )}
-                 </div>
-               ) : (
-                 <div className="text-center py-8">
-                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-3"></div>
-                   <p className="text-sm text-gray-400">Loading stats...</p>
-                 </div>
-               )}
+                <div className="space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-blue-50 rounded-xl p-4 text-center">
+                      <div className="text-blue-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-blue-600 mb-1">{playerCard.pace || '-'}</div>
+                      <div className="text-xs font-medium text-blue-700">PACE</div>
+                    </div>
+                    
+                    <div className="bg-red-50 rounded-xl p-4 text-center">
+                      <div className="text-red-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-red-600 mb-1">{playerCard.shoot || '-'}</div>
+                      <div className="text-xs font-medium text-red-700">SHOOT</div>
+                    </div>
+                    
+                    <div className="bg-green-50 rounded-xl p-4 text-center">
+                      <div className="text-green-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-green-600 mb-1">{playerCard.pass || '-'}</div>
+                      <div className="text-xs font-medium text-green-700">PASS</div>
+                    </div>
+                    
+                    <div className="bg-purple-50 rounded-xl p-4 text-center">
+                      <div className="text-purple-600 mb-2">
+                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="text-2xl font-bold text-purple-600 mb-1">{playerCard.defend || '-'}</div>
+                      <div className="text-xs font-medium text-purple-700">DEFEND</div>
+                    </div>
+                  </div>
+
+                  {/* Preferred Foot */}
+                  <div className="bg-gray-50 rounded-xl p-4 text-center">
+                    <div className="text-gray-600 mb-2">
+                      <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4 4 4 0 004-4V5z" />
+                      </svg>
+                    </div>
+                    <div className="text-lg font-semibold text-gray-800 mb-1">
+                      {playerCard.foot === 'L' ? 'Left Foot' : playerCard.foot === 'R' ? 'Right Foot' : 'Not specified'}
+                    </div>
+                    <div className="text-xs font-medium text-gray-600">PREFERRED FOOT</div>
+                  </div>
+
+                  {/* Overall Rating */}
+                  <div className="text-center">
+                    <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-full">
+                      <span className="text-sm font-medium">Overall Rating:</span>
+                      <span className="text-lg font-bold">
+                        {Math.round(((playerCard.pace || 0) + (playerCard.shoot || 0) + (playerCard.pass || 0) + (playerCard.defend || 0)) / 4 * 10) / 10}
+                </span>
+                      <span className="text-sm">/5</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-500">Loading player stats...</p>
+                </div>
+              )}
               
               {/* Badges */}
               {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
-                <div className="pt-4 border-t border-gray-700">
+                <div className="mt-6 pt-6 border-t border-gray-100">
                   <div className="text-center">
+                    <h5 className="text-sm font-semibold text-gray-700 mb-3">Achievements</h5>
                     <div className="flex justify-center gap-2 flex-wrap">
                       {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
-                        <span key={i} className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold shadow-lg">
-                          🏆 MVP Lv{badge.level}
-                        </span>
+                        <div key={i} className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                          🏅 MVP Level {badge.level}
+                        </div>
                       ))}
                     </div>
                   </div>
