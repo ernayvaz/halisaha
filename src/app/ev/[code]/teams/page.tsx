@@ -267,7 +267,7 @@ export default function TeamsPage() {
   };
 
   const toggleRosterLock = async () => {
-    if (!eventData) return;
+    if (!eventData || !isOwner) return;
     const r = await fetch(`/api/events/${eventData.id}/flags`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterLocked: !eventData.rosterLocked }) });
     if (r.ok) {
       const d = await r.json();
@@ -276,7 +276,7 @@ export default function TeamsPage() {
   };
 
   const resetEvent = async () => {
-    if (!eventData) return;
+    if (!eventData || !isOwner) return;
     if (!confirm('Reset teams and positions? Players will be kept.')) return;
     setBusy(true);
     const r = await fetch(`/api/events/${eventData.id}`, { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action: 'soft_reset' }) });
@@ -352,7 +352,7 @@ export default function TeamsPage() {
   };
 
   const addGuest = async () => {
-    if (!eventData) return;
+    if (!eventData || !isOwner) return;
     
     // Generate sequential guest name
     const existingGuests = participants.filter(p => p.isGuest);
@@ -398,7 +398,7 @@ export default function TeamsPage() {
   };
 
   const removePlayer = async (participantId: string) => {
-    if (!eventData) return;
+    if (!eventData || !isOwner) return;
     if (!confirm('Remove this player from the event?')) return;
     
     try {
@@ -844,8 +844,6 @@ export default function TeamsPage() {
           <button onClick={resetEvent} disabled={!isOwner} className="border px-3 py-1 rounded text-red-600 disabled:opacity-50">Reset Event</button>
         </div>
       </div>
-      <p className="text-sm text-gray-500">Assign players via → buttons. Players are automatically positioned based on their stats: Shoot→Forward, Pass→Midfielder, Defend→Defender. Only the creator can change teams and positions.</p>
-      {!isOwner && <p className="text-xs text-gray-500">You can rearrange locally for preview. Changes are not saved.</p>}
 
       {/* Players Section - Top */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1131,6 +1129,7 @@ export default function TeamsPage() {
         </div>
       )}
       
+      {busy && <p className="text-sm text-gray-500">Processing…</p>}
     </main>
   );
 }
@@ -1145,6 +1144,7 @@ function TeamBalance({ eventId, rosterLocked, isOwner }: { eventId: string; rost
   return (
     <div className="space-y-2">
       <button onClick={run} disabled={rosterLocked || !isOwner} className="bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded">Team-Balance</button>
+      {rosterLocked && <p className="text-xs text-gray-500">Roster is locked. Auto-balance is disabled.</p>}
       {preview && <p className="text-sm text-gray-600">Balanced • Score A: {preview.scoreA} • Score B: {preview.scoreB}</p>}
     </div>
   );
