@@ -43,7 +43,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
   }
 
-  // Handle existing user
+  // For guests, guestName is optional – we'll generate a unique sequential name server-side
+  // Only error if neither userId nor guest intent is provided (mode enforces join semantics)
+
   if (userId) {
     const exists = await prisma.participant.findFirst({ where: { eventId: id, userId } });
     if (exists) return NextResponse.json(exists);
@@ -55,10 +57,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   });
   const role = existingOwner ? 'player' : 'owner';
 
-  // Generate guest name if creating a guest (enforce uniqueness even if provided)
+  // Compute final guest name if creating a guest
   let finalGuestName: string | null = null;
   if (!userId) {
-    // Collect existing guest names for this event
+    // Generate unique sequential Guest N within this event
     const existing = await prisma.participant.findMany({
       where: { eventId: id, isGuest: true },
       select: { guestName: true },
@@ -66,12 +68,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const taken = new Set<string>(
       (existing.map((e) => e.guestName || '').filter(Boolean)) as string[]
     );
-
-    // If a guestName is provided and not taken, honor it; otherwise, allocate next available
+    
     if (guestName && !taken.has(guestName)) {
       finalGuestName = guestName;
     } else {
-      // Find the next available "Guest N"
+      // Extract max N from names shaped like "Guest N"
       let maxN = 0;
       for (const name of taken) {
         const m = /^Guest\s+(\d+)$/.exec(name);
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
           if (!isNaN(n)) maxN = Math.max(maxN, n);
         }
       }
+      // Start from maxN+1 and ensure uniqueness
       let candidate = maxN + 1;
       let name = `Guest ${candidate}`;
       while (taken.has(name)) {
@@ -94,14 +96,21 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     data: {
       eventId: id,
       userId: userId || null,
-      guestName: userId ? null : finalGuestName,
+      guestName: userId ? null : (finalGuestName || guestName || null),
       isGuest: !userId,
       role,
     },
   });
 
-  // Keep publish for participants
+  // Create teams if missing (but don't auto-assign participant)
+  await Promise.all([
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 1 } }, update: {}, create: { eventId: id, index: 1, name: 'Team 1', color: getTeamColor(1) } }),
+    prisma.team.upsert({ where: { eventId_index: { eventId: id, index: 2 } }, update: {}, create: { eventId: id, index: 2, name: 'Team 2', color: getTeamColor(2) } })
+  ]);
+
+  // Only notify about participant update (no team assignment)
   await publish({ type: 'participants_updated', eventId: id });
+  await publish({ type: 'teams_updated', eventId: id });
 
   return NextResponse.json(participant, { status: 201 });
 }

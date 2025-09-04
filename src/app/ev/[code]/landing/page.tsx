@@ -51,7 +51,7 @@ function ParticipantsList({ eventId }: { eventId: string }) {
                 {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
               </div>
               <span className="text-sm">
-                {p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}
+                {p.isGuest ? (p.guestName || `Guest ${participants.filter(x => x.isGuest && x.id <= p.id).length}`) : (p.user?.displayName || p.user?.handle)}
               </span>
               {p.role === 'owner' && (
                 <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-medium">
