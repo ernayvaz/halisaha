@@ -139,8 +139,8 @@ export default function TeamsPage() {
     (async () => {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
       eventUnsubRef.current = subscribe(e.id, (evt: RealtimeEvent) => {
-        // Skip updates during optimistic windows to prevent assignment resets
-        if (optimisticUpdate && Date.now() - optimisticUpdate < 1500) return;
+        // Skip updates during optimistic windows to prevent assignment resets, but allow if user is not owner
+        if (optimisticUpdate && Date.now() - optimisticUpdate < 1500 && isOwner) return;
         if (lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000) return;
         
         if (evt.type === 'participants_updated') {
@@ -296,32 +296,32 @@ export default function TeamsPage() {
     setBusy(false);
   };
 
-  const assign = (idx: 1|2, participantId: string) => {
+    const assign = (idx: 1|2, participantId: string) => {
     const t = team(idx);
     if (!t) return;
     
     // Check if player is already in the selected team
-    const from1 = asgnTeam1.find(a=>a.participantId===participantId);
-    const from2 = asgnTeam2.find(a=>a.participantId===participantId);
-    const participant = participants.find(p=>p.id===participantId);
-    if (!participant) return;
+      const from1 = asgnTeam1.find(a=>a.participantId===participantId);
+      const from2 = asgnTeam2.find(a=>a.participantId===participantId);
+      const participant = participants.find(p=>p.id===participantId);
+      if (!participant) return;
     
     // If player is already in the selected team, do nothing
     if ((idx === 1 && from1) || (idx === 2 && from2)) return;
     
     // Immediate UI feedback for all users
-    const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
+      const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
     
     setOptimisticUpdate(Date.now());
     if (idx === 1) {
       setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
       if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
-    } else {
+      } else {
       setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
       if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
-    }
+      }
     
-    // Counts will be updated by useEffect below
+            // Counts will be updated by useEffect below
 
     if (isOwner) {
       // Debounced API call for owners
@@ -342,9 +342,9 @@ export default function TeamsPage() {
         } catch (error) {
           console.error('Assignment failed:', error);
         } finally {
-          setTimeout(()=>setOptimisticUpdate(null), 500);
+          setTimeout(()=>setOptimisticUpdate(null), 200);
         }
-      }, 300); // 300ms debounce
+      }, 150); // 150ms debounce - faster response
       
       setDebounceTimers(prev => ({ ...prev, [key]: timer }));
     }
@@ -823,34 +823,34 @@ export default function TeamsPage() {
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
-                  {(() => { 
-                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                    const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
-                    const teamName = team1?.name || 'Team 1';
-                    return <button 
-                      onClick={()=>assign(1,p.id)} 
-                      className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                      style={{ backgroundColor: c, color: textColorFor(c) }}
-                      disabled={inTeam1}
-                    >
-                      {teamName}
-                    </button>; 
-                  })()}
-                  {(() => { 
-                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                    const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
-                    const teamName = team2?.name || 'Team 2';
-                    return <button 
-                      onClick={()=>assign(2,p.id)} 
-                      className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                      style={{ backgroundColor: c, color: textColorFor(c) }}
-                      disabled={inTeam2}
-                    >
-                      {teamName}
-                    </button>; 
-                  })()}
+                    {(() => { 
+                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                      const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
+                      const teamName = team1?.name || 'Team 1';
+                      return <button 
+                        onClick={()=>assign(1,p.id)} 
+                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        style={{ backgroundColor: c, color: textColorFor(c) }}
+                        disabled={inTeam1}
+                      >
+                        {teamName}
+                      </button>; 
+                    })()}
+                    {(() => { 
+                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                      const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
+                      const teamName = team2?.name || 'Team 2';
+                      return <button 
+                        onClick={()=>assign(2,p.id)} 
+                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                        style={{ backgroundColor: c, color: textColorFor(c) }}
+                        disabled={inTeam2}
+                      >
+                        {teamName}
+                      </button>; 
+                    })()}
                   {isOwner && <button onClick={()=>removePlayer(p.id)} className="text-xs border rounded px-2 py-1 text-red-600 hover:bg-red-50">Remove</button>}
                 </div>
               </li>
@@ -947,193 +947,119 @@ export default function TeamsPage() {
         </div>
       </section>
 
-      {/* Modern Player Card Modal */}
+      {/* Minimal Player Card Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-white rounded-lg shadow-lg max-w-xs w-full transform transition-all" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="relative bg-gradient-to-br from-blue-600 to-purple-700 px-6 py-8 text-white">
+            <div className="relative bg-gray-50 px-4 py-3 border-b">
               <button 
                 onClick={() => setSelectedPlayer(null)} 
-                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
+                className="absolute top-2 right-2 w-6 h-6 rounded-full hover:bg-gray-200 flex items-center justify-center transition-colors"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
               
-              <div className="text-center">
-                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm text-white text-3xl font-bold flex items-center justify-center mx-auto mb-3 ring-4 ring-white/30">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-green-600 text-white text-lg font-bold flex items-center justify-center">
                   {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
                 </div>
-                <h4 className="text-xl font-bold mb-1">
+                <div>
+                  <h4 className="font-semibold text-gray-900">
                   {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
                 </h4>
                 {(selectedPlayer as any).role === 'owner' && (
-                  <div className="inline-flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-medium">
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd" />
-                    </svg>
-                    Owner
-          </div>
-                )}
+                    <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs font-medium">
+                      👑 Owner
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-6">
+            <div className="p-4">
                              {selectedPlayer.isGuest ? (
-                 <div className="space-y-6">
-                   {/* Guest Stats Grid */}
-                   <div className="grid grid-cols-2 gap-4">
-                     {/* Pace */}
-                     <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 text-center">
-                       <div className="flex items-center justify-center mb-2">
-                         <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                         </svg>
+                <div className="space-y-3">
+                  {/* Guest Stats */}
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-red-600">3</div>
+                      <div className="text-xs text-gray-600">Pace</div>
                        </div>
-                       <p className="text-xs text-red-700 font-medium mb-1">Pace</p>
-                       <p className="text-2xl font-bold text-red-800">3</p>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-orange-600">3</div>
+                      <div className="text-xs text-gray-600">Shoot</div>
                      </div>
-                     
-                     {/* Shoot */}
-                     <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 text-center">
-                       <div className="flex items-center justify-center mb-2">
-                         <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 3v10a2 2 0 002 2h6a2 2 0 002-2V7H7z" />
-                         </svg>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-blue-600">3</div>
+                      <div className="text-xs text-gray-600">Pass</div>
                        </div>
-                       <p className="text-xs text-orange-700 font-medium mb-1">Shoot</p>
-                       <p className="text-2xl font-bold text-orange-800">3</p>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-green-600">3</div>
+                      <div className="text-xs text-gray-600">Defend</div>
                      </div>
-                     
-                     {/* Pass */}
-                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
-                       <div className="flex items-center justify-center mb-2">
-                         <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                         </svg>
                        </div>
-                       <p className="text-xs text-blue-700 font-medium mb-1">Pass</p>
-                       <p className="text-2xl font-bold text-blue-800">3</p>
-                     </div>
-                     
-                     {/* Defend */}
-                     <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center">
-                       <div className="flex items-center justify-center mb-2">
-                         <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.031 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                         </svg>
-                       </div>
-                       <p className="text-xs text-green-700 font-medium mb-1">Defend</p>
-                       <p className="text-2xl font-bold text-green-800">3</p>
-                     </div>
-                   </div>
-                   
-                   {/* Overall Rating */}
-                   <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-4 text-white text-center">
-                     <p className="text-sm opacity-90 mb-1">Overall Rating</p>
-                     <p className="text-3xl font-bold">12</p>
-                   </div>
-                   
-                   {/* Preferred Foot */}
-                   <div className="bg-gray-50 rounded-xl p-4 text-center">
-                     <div className="flex items-center justify-center mb-2">
-                       <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                       </svg>
-                     </div>
-                     <p className="text-sm text-gray-600 font-medium mb-1">Preferred Foot</p>
-                     <p className="text-lg font-semibold text-gray-800">Right</p>
+                  <div className="text-center pt-2 border-t">
+                    <span className="text-sm text-gray-600">Overall: </span>
+                    <span className="text-lg font-bold text-gray-800">3.0</span>
+                    <span className="text-sm text-gray-600">/5</span>
                    </div>
                  </div>
                ) : playerCard ? (
-                <div className="space-y-6">
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-blue-50 rounded-xl p-4 text-center">
-                      <div className="text-blue-600 mb-2">
-                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
+                <div className="space-y-3">
+                  {/* Player Stats */}
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-red-600">{playerCard.pace || 1}</div>
+                      <div className="text-xs text-gray-600">Pace</div>
                       </div>
-                      <div className="text-2xl font-bold text-blue-600 mb-1">{playerCard.pace || '-'}</div>
-                      <div className="text-xs font-medium text-blue-700">PACE</div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-orange-600">{playerCard.shoot || 1}</div>
+                      <div className="text-xs text-gray-600">Shoot</div>
                     </div>
-                    
-                    <div className="bg-red-50 rounded-xl p-4 text-center">
-                      <div className="text-red-600 mb-2">
-                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                        </svg>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-blue-600">{playerCard.pass || 1}</div>
+                      <div className="text-xs text-gray-600">Pass</div>
                       </div>
-                      <div className="text-2xl font-bold text-red-600 mb-1">{playerCard.shoot || '-'}</div>
-                      <div className="text-xs font-medium text-red-700">SHOOT</div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-green-600">{playerCard.defend || 1}</div>
+                      <div className="text-xs text-gray-600">Defend</div>
                     </div>
-                    
-                    <div className="bg-green-50 rounded-xl p-4 text-center">
-                      <div className="text-green-600 mb-2">
-                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
                       </div>
-                      <div className="text-2xl font-bold text-green-600 mb-1">{playerCard.pass || '-'}</div>
-                      <div className="text-xs font-medium text-green-700">PASS</div>
+                  <div className="text-center pt-2 border-t">
+                    <span className="text-sm text-gray-600">Overall: </span>
+                    <span className="text-lg font-bold text-gray-800">
+                      {Math.round(((playerCard.pace || 1) + (playerCard.shoot || 1) + (playerCard.pass || 1) + (playerCard.defend || 1)) / 4 * 10) / 10}
+                    </span>
+                    <span className="text-sm text-gray-600">/5</span>
                     </div>
-                    
-                    <div className="bg-purple-50 rounded-xl p-4 text-center">
-                      <div className="text-purple-600 mb-2">
-                        <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <div className="text-2xl font-bold text-purple-600 mb-1">{playerCard.defend || '-'}</div>
-                      <div className="text-xs font-medium text-purple-700">DEFEND</div>
-                    </div>
-                  </div>
-
-                  {/* Preferred Foot */}
-                  <div className="bg-gray-50 rounded-xl p-4 text-center">
-                    <div className="text-gray-600 mb-2">
-                      <svg className="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4 4 4 0 004-4V5z" />
-                      </svg>
-                    </div>
-                    <div className="text-lg font-semibold text-gray-800 mb-1">
-                      {playerCard.foot === 'L' ? 'Left Foot' : playerCard.foot === 'R' ? 'Right Foot' : 'Not specified'}
-                    </div>
-                    <div className="text-xs font-medium text-gray-600">PREFERRED FOOT</div>
-                  </div>
-
-                  {/* Overall Rating */}
-                  <div className="text-center">
-                    <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-full">
-                      <span className="text-sm font-medium">Overall Rating:</span>
-                      <span className="text-lg font-bold">
-                        {Math.round(((playerCard.pace || 0) + (playerCard.shoot || 0) + (playerCard.pass || 0) + (playerCard.defend || 0)) / 4 * 10) / 10}
+                  {playerCard.foot && (
+                    <div className="text-center pt-1">
+                      <span className="text-xs text-gray-500">
+                        {playerCard.foot === 'L' ? '🦶 Left Foot' : '🦶 Right Foot'}
                 </span>
-                      <span className="text-sm">/5</span>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-500">Loading player stats...</p>
+                <div className="text-center py-6">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
+                  <p className="text-sm text-gray-500">Loading...</p>
                 </div>
               )}
               
               {/* Badges */}
               {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-gray-100">
+                <div className="pt-3 border-t">
                   <div className="text-center">
-                    <h5 className="text-sm font-semibold text-gray-700 mb-3">Achievements</h5>
-                    <div className="flex justify-center gap-2 flex-wrap">
+                    <div className="flex justify-center gap-1 flex-wrap">
                       {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
-                        <div key={i} className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                          🏅 MVP Level {badge.level}
-                        </div>
+                        <span key={i} className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
+                          🏅 MVP Lv{badge.level}
+                        </span>
                       ))}
                     </div>
                   </div>
