@@ -533,27 +533,25 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
                      <div className="flex items-center justify-between mb-2">
              <h3 className="font-medium">Players</h3>
-             {isOwner && (
-               <button 
-                 onClick={addGuest} 
-                 disabled={addingGuest || !!eventData?.rosterLocked} 
-                 className="text-xs border rounded px-3 py-1 disabled:opacity-50 hover:bg-green-50 hover:border-green-300 transition-colors flex items-center gap-1"
-               >
-                 {addingGuest ? (
-                   <>
-                     <div className="w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin"></div>
-                     Adding...
-                   </>
-                 ) : (
-                   <>
-                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                     </svg>
-                     Add Guest
-                   </>
-                 )}
-               </button>
-             )}
+             <button 
+               onClick={addGuest} 
+               disabled={addingGuest || !!eventData?.rosterLocked} 
+               className="text-xs border rounded px-3 py-1 disabled:opacity-50 hover:bg-green-50 hover:border-green-300 transition-colors flex items-center gap-1"
+             >
+               {addingGuest ? (
+                 <>
+                   <div className="w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                   Adding...
+                 </>
+               ) : (
+                 <>
+                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                   </svg>
+                   Add Guest
+                 </>
+               )}
+             </button>
            </div>
           <ul className="space-y-2">
             {participants.map((p)=> (
