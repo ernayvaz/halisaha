@@ -522,7 +522,7 @@ export default function TeamsPage() {
   const getPlayerStats = async (participant: Participant) => {
     if (participant.isGuest) {
       // Default stats for guest players
-      return { pace: 3, shoot: 3, pass: 3, defend: 3 };
+      return { pace: 2, shoot: 2, pass: 2, defend: 2 };
     }
     if (!participant.user?.id) {
       return { pace: 1, shoot: 1, pass: 1, defend: 1 };
@@ -1042,27 +1042,28 @@ export default function TeamsPage() {
                    {/* Guest Stats */}
                    <div className="grid grid-cols-2 gap-3">
                      <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-red-400 mb-1">3</div>
+                       <div className="text-2xl font-bold text-red-400 mb-1">2</div>
                        <div className="text-xs text-gray-400 uppercase tracking-wide">Pace</div>
                      </div>
                      <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-orange-400 mb-1">3</div>
+                       <div className="text-2xl font-bold text-orange-400 mb-1">2</div>
                        <div className="text-xs text-gray-400 uppercase tracking-wide">Shoot</div>
                      </div>
                      <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-blue-400 mb-1">3</div>
+                       <div className="text-2xl font-bold text-blue-400 mb-1">2</div>
                        <div className="text-xs text-gray-400 uppercase tracking-wide">Pass</div>
                      </div>
                      <div className="bg-gray-800 rounded-lg p-3 text-center">
-                       <div className="text-2xl font-bold text-green-400 mb-1">3</div>
+                       <div className="text-2xl font-bold text-green-400 mb-1">2</div>
                        <div className="text-xs text-gray-400 uppercase tracking-wide">Defend</div>
                      </div>
                    </div>
                    <div className="text-center pt-3 border-t border-gray-700">
                      <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-2 rounded-full inline-flex items-center gap-2">
                        <span className="text-sm font-medium">Overall</span>
-                       <span className="text-lg font-bold">3.0</span>
+                       <span className="text-lg font-bold">2.0</span>
                        <span className="text-sm opacity-80">/5</span>
+                       <span className="text-xs ml-2 bg-white/20 px-2 py-1 rounded">Right Foot</span>
                      </div>
                    </div>
                  </div>
