@@ -947,32 +947,32 @@ export default function TeamsPage() {
         </div>
       </section>
 
-      {/* Minimal Player Card Modal */}
+      {/* Modern Dark Player Card Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
-          <div className="bg-white rounded-lg shadow-lg max-w-xs w-full transform transition-all" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl max-w-sm w-full transform transition-all" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="relative bg-gray-50 px-4 py-3 border-b">
+            <div className="relative px-6 py-4 border-b border-gray-700">
               <button 
                 onClick={() => setSelectedPlayer(null)} 
-                className="absolute top-2 right-2 w-6 h-6 rounded-full hover:bg-gray-200 flex items-center justify-center transition-colors"
+                className="absolute top-3 right-3 w-6 h-6 rounded-full hover:bg-gray-700 flex items-center justify-center transition-colors"
               >
-                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
               
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-green-600 text-white text-lg font-bold flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 text-white text-lg font-bold flex items-center justify-center ring-2 ring-green-400/30">
                   {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">
+                  <h4 className="font-semibold text-white text-lg">
                     {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
                   </h4>
                   {(selectedPlayer as any).role === 'owner' && (
-                    <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs font-medium">
-                      👑 Owner
+                    <span className="inline-flex items-center gap-1 bg-yellow-500 text-black px-2 py-1 rounded-full text-xs font-bold">
+                      ⚡ Owner
                     </span>
                   )}
                 </div>
@@ -980,85 +980,89 @@ export default function TeamsPage() {
             </div>
 
             {/* Content */}
-            <div className="p-4">
+            <div className="p-6 bg-gray-900">
                              {selectedPlayer.isGuest ? (
-                 <div className="space-y-3">
+                 <div className="space-y-4">
                    {/* Guest Stats */}
-                   <div className="grid grid-cols-4 gap-2">
-                     <div className="text-center">
-                       <div className="text-lg font-bold text-red-600">3</div>
-                       <div className="text-xs text-gray-600">Pace</div>
+                   <div className="grid grid-cols-2 gap-3">
+                     <div className="bg-gray-800 rounded-lg p-3 text-center">
+                       <div className="text-2xl font-bold text-red-400 mb-1">3</div>
+                       <div className="text-xs text-gray-400 uppercase tracking-wide">Pace</div>
                      </div>
-                     <div className="text-center">
-                       <div className="text-lg font-bold text-orange-600">3</div>
-                       <div className="text-xs text-gray-600">Shoot</div>
+                     <div className="bg-gray-800 rounded-lg p-3 text-center">
+                       <div className="text-2xl font-bold text-orange-400 mb-1">3</div>
+                       <div className="text-xs text-gray-400 uppercase tracking-wide">Shoot</div>
                      </div>
-                     <div className="text-center">
-                       <div className="text-lg font-bold text-blue-600">3</div>
-                       <div className="text-xs text-gray-600">Pass</div>
+                     <div className="bg-gray-800 rounded-lg p-3 text-center">
+                       <div className="text-2xl font-bold text-blue-400 mb-1">3</div>
+                       <div className="text-xs text-gray-400 uppercase tracking-wide">Pass</div>
                      </div>
-                     <div className="text-center">
-                       <div className="text-lg font-bold text-green-600">3</div>
-                       <div className="text-xs text-gray-600">Defend</div>
+                     <div className="bg-gray-800 rounded-lg p-3 text-center">
+                       <div className="text-2xl font-bold text-green-400 mb-1">3</div>
+                       <div className="text-xs text-gray-400 uppercase tracking-wide">Defend</div>
                      </div>
                    </div>
-                   <div className="text-center pt-2 border-t">
-                     <span className="text-sm text-gray-600">Overall: </span>
-                     <span className="text-lg font-bold text-gray-800">3.0</span>
-                     <span className="text-sm text-gray-600">/5</span>
+                   <div className="text-center pt-3 border-t border-gray-700">
+                     <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-2 rounded-full inline-flex items-center gap-2">
+                       <span className="text-sm font-medium">Overall</span>
+                       <span className="text-lg font-bold">3.0</span>
+                       <span className="text-sm opacity-80">/5</span>
+                     </div>
                    </div>
                  </div>
                ) : playerCard ? (
-                 <div className="space-y-3">
+                 <div className="space-y-4">
                    {/* Player Stats */}
-                   <div className="grid grid-cols-4 gap-2">
-                     <div className="text-center">
-                       <div className="text-lg font-bold text-red-600">{playerCard.pace || 1}</div>
-                       <div className="text-xs text-gray-600">Pace</div>
+                   <div className="grid grid-cols-2 gap-3">
+                     <div className="bg-gray-800 rounded-lg p-3 text-center">
+                       <div className="text-2xl font-bold text-red-400 mb-1">{playerCard.pace || 1}</div>
+                       <div className="text-xs text-gray-400 uppercase tracking-wide">Pace</div>
                      </div>
-                     <div className="text-center">
-                       <div className="text-lg font-bold text-orange-600">{playerCard.shoot || 1}</div>
-                       <div className="text-xs text-gray-600">Shoot</div>
+                     <div className="bg-gray-800 rounded-lg p-3 text-center">
+                       <div className="text-2xl font-bold text-orange-400 mb-1">{playerCard.shoot || 1}</div>
+                       <div className="text-xs text-gray-400 uppercase tracking-wide">Shoot</div>
                      </div>
-                     <div className="text-center">
-                       <div className="text-lg font-bold text-blue-600">{playerCard.pass || 1}</div>
-                       <div className="text-xs text-gray-600">Pass</div>
+                     <div className="bg-gray-800 rounded-lg p-3 text-center">
+                       <div className="text-2xl font-bold text-blue-400 mb-1">{playerCard.pass || 1}</div>
+                       <div className="text-xs text-gray-400 uppercase tracking-wide">Pass</div>
                      </div>
-                     <div className="text-center">
-                       <div className="text-lg font-bold text-green-600">{playerCard.defend || 1}</div>
-                       <div className="text-xs text-gray-600">Defend</div>
+                     <div className="bg-gray-800 rounded-lg p-3 text-center">
+                       <div className="text-2xl font-bold text-green-400 mb-1">{playerCard.defend || 1}</div>
+                       <div className="text-xs text-gray-400 uppercase tracking-wide">Defend</div>
                      </div>
                    </div>
-                   <div className="text-center pt-2 border-t">
-                     <span className="text-sm text-gray-600">Overall: </span>
-                     <span className="text-lg font-bold text-gray-800">
-                       {Math.round(((playerCard.pace || 1) + (playerCard.shoot || 1) + (playerCard.pass || 1) + (playerCard.defend || 1)) / 4 * 10) / 10}
-                     </span>
-                     <span className="text-sm text-gray-600">/5</span>
+                   <div className="text-center pt-3 border-t border-gray-700">
+                     <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-2 rounded-full inline-flex items-center gap-2">
+                       <span className="text-sm font-medium">Overall</span>
+                       <span className="text-lg font-bold">
+                         {Math.round(((playerCard.pace || 1) + (playerCard.shoot || 1) + (playerCard.pass || 1) + (playerCard.defend || 1)) / 4 * 10) / 10}
+                       </span>
+                       <span className="text-sm opacity-80">/5</span>
+                     </div>
                    </div>
                    {playerCard.foot && (
-                     <div className="text-center pt-1">
-                       <span className="text-xs text-gray-500">
-                         {playerCard.foot === 'L' ? '🦶 Left Foot' : '🦶 Right Foot'}
+                     <div className="text-center pt-2">
+                       <span className="text-xs text-gray-400 bg-gray-800 px-3 py-1 rounded-full">
+                         {playerCard.foot === 'L' ? '👈 Left Foot' : '👉 Right Foot'}
                        </span>
                      </div>
                    )}
                  </div>
                ) : (
-                 <div className="text-center py-6">
-                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
-                   <p className="text-sm text-gray-500">Loading...</p>
+                 <div className="text-center py-8">
+                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-3"></div>
+                   <p className="text-sm text-gray-400">Loading stats...</p>
                  </div>
                )}
               
               {/* Badges */}
               {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
-                <div className="pt-3 border-t">
+                <div className="pt-4 border-t border-gray-700">
                   <div className="text-center">
-                    <div className="flex justify-center gap-1 flex-wrap">
+                    <div className="flex justify-center gap-2 flex-wrap">
                       {(selectedPlayer.user as any).badges.map((badge: any, i: number) => (
-                        <span key={i} className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium">
-                          🏅 MVP Lv{badge.level}
+                        <span key={i} className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                          🏆 MVP Lv{badge.level}
                         </span>
                       ))}
                     </div>
