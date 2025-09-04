@@ -267,7 +267,7 @@ export default function TeamsPage() {
   };
 
   const toggleRosterLock = async () => {
-    if (!eventData || !isOwner) return;
+    if (!eventData) return;
     const r = await fetch(`/api/events/${eventData.id}/flags`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterLocked: !eventData.rosterLocked }) });
     if (r.ok) {
       const d = await r.json();
@@ -276,7 +276,7 @@ export default function TeamsPage() {
   };
 
   const resetEvent = async () => {
-    if (!eventData || !isOwner) return;
+    if (!eventData) return;
     if (!confirm('Reset teams and positions? Players will be kept.')) return;
     setBusy(true);
     const r = await fetch(`/api/events/${eventData.id}`, { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action: 'soft_reset' }) });
@@ -352,7 +352,7 @@ export default function TeamsPage() {
   };
 
   const addGuest = async () => {
-    if (!eventData || !isOwner) return;
+    if (!eventData) return;
     
     // Generate sequential guest name
     const existingGuests = participants.filter(p => p.isGuest);
@@ -398,7 +398,7 @@ export default function TeamsPage() {
   };
 
   const removePlayer = async (participantId: string) => {
-    if (!eventData || !isOwner) return;
+    if (!eventData) return;
     if (!confirm('Remove this player from the event?')) return;
     
     try {
@@ -850,7 +850,7 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            {isOwner && (
+            {(
               <button 
                 onClick={addGuest} 
                 disabled={addingGuest || eventData?.rosterLocked} 
