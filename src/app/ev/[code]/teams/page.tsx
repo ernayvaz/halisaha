@@ -850,15 +850,13 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            {(
-              <button 
-                onClick={addGuest} 
-                disabled={addingGuest || eventData?.rosterLocked} 
-                className="text-xs border rounded px-2 py-1 disabled:opacity-50 hover:bg-gray-50"
-              >
-                {addingGuest ? 'Adding...' : '+1 Guest'}
-              </button>
-            )}
+            <button 
+              onClick={addGuest} 
+              disabled={addingGuest || eventData?.rosterLocked} 
+              className="text-xs border rounded px-2 py-1 disabled:opacity-50 hover:bg-gray-50"
+            >
+              {addingGuest ? 'Adding...' : '+1 Guest'}
+            </button>
           </div>
           <ul className="space-y-2">
             {participants.map((p)=> (
