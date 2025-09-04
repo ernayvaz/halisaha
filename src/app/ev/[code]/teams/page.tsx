@@ -139,8 +139,8 @@ export default function TeamsPage() {
     (async () => {
       const e = await fetch(`/api/events?code=${encodeURIComponent(code)}`).then(x=>x.json());
       eventUnsubRef.current = subscribe(e.id, (evt: RealtimeEvent) => {
-        // Skip updates during optimistic windows to prevent assignment resets, but allow if user is not owner
-        if (optimisticUpdate && Date.now() - optimisticUpdate < 1500 && isOwner) return;
+        // Skip updates during optimistic windows to prevent assignment resets, but allow non-assignment updates
+        if (optimisticUpdate && Date.now() - optimisticUpdate < 1500 && (evt.type === 'assignments_updated' || evt.type === 'teams_updated')) return;
         if (lastGuestAddedAt && Date.now() - lastGuestAddedAt < 2000) return;
         
         if (evt.type === 'participants_updated') {
@@ -296,32 +296,32 @@ export default function TeamsPage() {
     setBusy(false);
   };
 
-    const assign = (idx: 1|2, participantId: string) => {
+  const assign = (idx: 1|2, participantId: string) => {
     const t = team(idx);
     if (!t) return;
     
     // Check if player is already in the selected team
-      const from1 = asgnTeam1.find(a=>a.participantId===participantId);
-      const from2 = asgnTeam2.find(a=>a.participantId===participantId);
-      const participant = participants.find(p=>p.id===participantId);
-      if (!participant) return;
+    const from1 = asgnTeam1.find(a=>a.participantId===participantId);
+    const from2 = asgnTeam2.find(a=>a.participantId===participantId);
+    const participant = participants.find(p=>p.id===participantId);
+    if (!participant) return;
     
     // If player is already in the selected team, do nothing
     if ((idx === 1 && from1) || (idx === 2 && from2)) return;
     
     // Immediate UI feedback for all users
-      const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
+    const mkAssignment = (teamId: string): Assignment => ({ id: `local-${participantId}-${teamId}`, teamId, participantId, participant });
     
     setOptimisticUpdate(Date.now());
     if (idx === 1) {
       setAsgnTeam1(prev => [...prev, mkAssignment(t.id)]);
       if (from2) setAsgnTeam2(prev => prev.filter(a => a.participantId !== participantId));
-      } else {
+    } else {
       setAsgnTeam2(prev => [...prev, mkAssignment(t.id)]);
       if (from1) setAsgnTeam1(prev => prev.filter(a => a.participantId !== participantId));
-      }
+    }
     
-            // Counts will be updated by useEffect below
+    // Counts will be updated by useEffect below
 
     if (isOwner) {
       // Debounced API call for owners
@@ -344,7 +344,7 @@ export default function TeamsPage() {
         } finally {
           setTimeout(()=>setOptimisticUpdate(null), 200);
         }
-      }, 150); // 150ms debounce - faster response
+      }, 300); // 300ms debounce
       
       setDebounceTimers(prev => ({ ...prev, [key]: timer }));
     }
@@ -823,34 +823,34 @@ export default function TeamsPage() {
                   {!p.isGuest && <MVPBadge p={p} />}
                 </span>
                 <div className="flex gap-2">
-                    {(() => { 
-                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
-                      const teamName = team1?.name || 'Team 1';
-                      return <button 
-                        onClick={()=>assign(1,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c) }}
-                        disabled={inTeam1}
-                      >
-                        {teamName}
-                      </button>; 
-                    })()}
-                    {(() => { 
-                      const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
-                      const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
-                      const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
-                      const teamName = team2?.name || 'Team 2';
-                      return <button 
-                        onClick={()=>assign(2,p.id)} 
-                        className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
-                        style={{ backgroundColor: c, color: textColorFor(c) }}
-                        disabled={inTeam2}
-                      >
-                        {teamName}
-                      </button>; 
-                    })()}
+                  {(() => { 
+                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                    const c = inTeam1 ? (team1?.color || '#dc2626') : '#000000'; 
+                    const teamName = team1?.name || 'Team 1';
+                    return <button 
+                      onClick={()=>assign(1,p.id)} 
+                      className={`text-xs border rounded px-2 py-1 font-medium ${inTeam1 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                      style={{ backgroundColor: c, color: textColorFor(c) }}
+                      disabled={inTeam1}
+                    >
+                      {teamName}
+                    </button>; 
+                  })()}
+                  {(() => { 
+                    const inTeam1 = asgnTeam1.some(a=>a.participantId===p.id);
+                    const inTeam2 = asgnTeam2.some(a=>a.participantId===p.id);
+                    const c = inTeam2 ? (team2?.color || '#f59e0b') : '#000000'; 
+                    const teamName = team2?.name || 'Team 2';
+                    return <button 
+                      onClick={()=>assign(2,p.id)} 
+                      className={`text-xs border rounded px-2 py-1 font-medium ${inTeam2 ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                      style={{ backgroundColor: c, color: textColorFor(c) }}
+                      disabled={inTeam2}
+                    >
+                      {teamName}
+                    </button>; 
+                  })()}
                   {isOwner && <button onClick={()=>removePlayer(p.id)} className="text-xs border rounded px-2 py-1 text-red-600 hover:bg-red-50">Remove</button>}
                 </div>
               </li>
@@ -968,9 +968,9 @@ export default function TeamsPage() {
                 </div>
                 <div>
                   <h4 className="font-semibold text-gray-900">
-                  {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
-                </h4>
-                {(selectedPlayer as any).role === 'owner' && (
+                    {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
+                  </h4>
+                  {(selectedPlayer as any).role === 'owner' && (
                     <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs font-medium">
                       👑 Owner
                     </span>
@@ -982,74 +982,74 @@ export default function TeamsPage() {
             {/* Content */}
             <div className="p-4">
                              {selectedPlayer.isGuest ? (
-                <div className="space-y-3">
-                  {/* Guest Stats */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-red-600">3</div>
-                      <div className="text-xs text-gray-600">Pace</div>
-                       </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-orange-600">3</div>
-                      <div className="text-xs text-gray-600">Shoot</div>
+                 <div className="space-y-3">
+                   {/* Guest Stats */}
+                   <div className="grid grid-cols-4 gap-2">
+                     <div className="text-center">
+                       <div className="text-lg font-bold text-red-600">3</div>
+                       <div className="text-xs text-gray-600">Pace</div>
                      </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-blue-600">3</div>
-                      <div className="text-xs text-gray-600">Pass</div>
-                       </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-green-600">3</div>
-                      <div className="text-xs text-gray-600">Defend</div>
+                     <div className="text-center">
+                       <div className="text-lg font-bold text-orange-600">3</div>
+                       <div className="text-xs text-gray-600">Shoot</div>
                      </div>
-                       </div>
-                  <div className="text-center pt-2 border-t">
-                    <span className="text-sm text-gray-600">Overall: </span>
-                    <span className="text-lg font-bold text-gray-800">3.0</span>
-                    <span className="text-sm text-gray-600">/5</span>
+                     <div className="text-center">
+                       <div className="text-lg font-bold text-blue-600">3</div>
+                       <div className="text-xs text-gray-600">Pass</div>
+                     </div>
+                     <div className="text-center">
+                       <div className="text-lg font-bold text-green-600">3</div>
+                       <div className="text-xs text-gray-600">Defend</div>
+                     </div>
+                   </div>
+                   <div className="text-center pt-2 border-t">
+                     <span className="text-sm text-gray-600">Overall: </span>
+                     <span className="text-lg font-bold text-gray-800">3.0</span>
+                     <span className="text-sm text-gray-600">/5</span>
                    </div>
                  </div>
                ) : playerCard ? (
-                <div className="space-y-3">
-                  {/* Player Stats */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-red-600">{playerCard.pace || 1}</div>
-                      <div className="text-xs text-gray-600">Pace</div>
-                      </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-orange-600">{playerCard.shoot || 1}</div>
-                      <div className="text-xs text-gray-600">Shoot</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-blue-600">{playerCard.pass || 1}</div>
-                      <div className="text-xs text-gray-600">Pass</div>
-                      </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-green-600">{playerCard.defend || 1}</div>
-                      <div className="text-xs text-gray-600">Defend</div>
-                    </div>
-                      </div>
-                  <div className="text-center pt-2 border-t">
-                    <span className="text-sm text-gray-600">Overall: </span>
-                    <span className="text-lg font-bold text-gray-800">
-                      {Math.round(((playerCard.pace || 1) + (playerCard.shoot || 1) + (playerCard.pass || 1) + (playerCard.defend || 1)) / 4 * 10) / 10}
-                    </span>
-                    <span className="text-sm text-gray-600">/5</span>
-                    </div>
-                  {playerCard.foot && (
-                    <div className="text-center pt-1">
-                      <span className="text-xs text-gray-500">
-                        {playerCard.foot === 'L' ? '🦶 Left Foot' : '🦶 Right Foot'}
-                </span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
-                  <p className="text-sm text-gray-500">Loading...</p>
-                </div>
-              )}
+                 <div className="space-y-3">
+                   {/* Player Stats */}
+                   <div className="grid grid-cols-4 gap-2">
+                     <div className="text-center">
+                       <div className="text-lg font-bold text-red-600">{playerCard.pace || 1}</div>
+                       <div className="text-xs text-gray-600">Pace</div>
+                     </div>
+                     <div className="text-center">
+                       <div className="text-lg font-bold text-orange-600">{playerCard.shoot || 1}</div>
+                       <div className="text-xs text-gray-600">Shoot</div>
+                     </div>
+                     <div className="text-center">
+                       <div className="text-lg font-bold text-blue-600">{playerCard.pass || 1}</div>
+                       <div className="text-xs text-gray-600">Pass</div>
+                     </div>
+                     <div className="text-center">
+                       <div className="text-lg font-bold text-green-600">{playerCard.defend || 1}</div>
+                       <div className="text-xs text-gray-600">Defend</div>
+                     </div>
+                   </div>
+                   <div className="text-center pt-2 border-t">
+                     <span className="text-sm text-gray-600">Overall: </span>
+                     <span className="text-lg font-bold text-gray-800">
+                       {Math.round(((playerCard.pace || 1) + (playerCard.shoot || 1) + (playerCard.pass || 1) + (playerCard.defend || 1)) / 4 * 10) / 10}
+                     </span>
+                     <span className="text-sm text-gray-600">/5</span>
+                   </div>
+                   {playerCard.foot && (
+                     <div className="text-center pt-1">
+                       <span className="text-xs text-gray-500">
+                         {playerCard.foot === 'L' ? '🦶 Left Foot' : '🦶 Right Foot'}
+                       </span>
+                     </div>
+                   )}
+                 </div>
+               ) : (
+                 <div className="text-center py-6">
+                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
+                   <p className="text-sm text-gray-500">Loading...</p>
+                 </div>
+               )}
               
               {/* Badges */}
               {!selectedPlayer.isGuest && (selectedPlayer.user as any)?.badges?.length > 0 && (
