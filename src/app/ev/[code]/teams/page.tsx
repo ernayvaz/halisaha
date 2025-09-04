@@ -267,7 +267,7 @@ export default function TeamsPage() {
   };
 
   const toggleRosterLock = async () => {
-    if (!eventData) return;
+    if (!eventData || !isOwner) return;
     const r = await fetch(`/api/events/${eventData.id}/flags`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterLocked: !eventData.rosterLocked }) });
     if (r.ok) {
       const d = await r.json();
@@ -276,7 +276,7 @@ export default function TeamsPage() {
   };
 
   const resetEvent = async () => {
-    if (!eventData) return;
+    if (!eventData || !isOwner) return;
     if (!confirm('Reset teams and positions? Players will be kept.')) return;
     setBusy(true);
     const r = await fetch(`/api/events/${eventData.id}`, { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action: 'soft_reset' }) });
