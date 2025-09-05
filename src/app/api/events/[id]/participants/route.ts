@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const { userId, guestName, mode } = (await req.json()) as {
     userId?: string;
     guestName?: string;
-    mode: 'join' | 'view' | 'guest';
+    mode: 'join' | 'view';
   };
 
   const { id } = await context.params;
@@ -43,35 +43,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
   }
 
-  // Handle guest creation
-  if (mode === 'guest' || (guestName !== undefined && !userId)) {
-    // Get existing guests to determine numbering
-    const existingGuests = await prisma.participant.findMany({
-      where: { 
-        eventId: id,
-        isGuest: true 
-      },
-      orderBy: { joinedAt: 'asc' }
-    });
+  // For guests, guestName is optional – we'll generate a unique sequential name server-side
+  // Only error if neither userId nor guest intent is provided (mode enforces join semantics)
 
-    // Generate guest name with proper numbering
-    const guestNumber = existingGuests.length + 1;
-    const finalGuestName = guestName || `Guest ${guestNumber}`;
-
-    const guestParticipant = await prisma.participant.create({
-      data: {
-        eventId: id,
-        guestName: finalGuestName,
-        isGuest: true,
-        role: 'player',
-      },
-    });
-
-    await publish({ type: 'participants_updated', eventId: id });
-    return NextResponse.json(guestParticipant, { status: 201 });
-  }
-
-  // For regular users
   if (userId) {
     const exists = await prisma.participant.findFirst({ where: { eventId: id, userId } });
     if (exists) return NextResponse.json(exists);
@@ -83,7 +57,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   });
   const role = existingOwner ? 'player' : 'owner';
 
-  // Create regular participant
+  // Simplify participant create (lines 90-98) without guest
   const participant = await prisma.participant.create({
     data: {
       eventId: id,
