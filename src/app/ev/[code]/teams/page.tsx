@@ -28,6 +28,7 @@ export default function TeamsPage() {
   const [lastGuestAddedAt, setLastGuestAddedAt] = useState<number>(0);
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
+  const [addingGuest, setAddingGuest] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
   const [playerCard, setPlayerCard] = useState<any>(null);
   const [debounceTimers, setDebounceTimers] = useState<Record<string, NodeJS.Timeout>>({});
@@ -270,6 +271,40 @@ export default function TeamsPage() {
     setBusy(false);
   };
 
+  const addGuest = async () => {
+    if (!eventData || addingGuest) return;
+    
+    setAddingGuest(true);
+    
+    try {
+      const response = await fetch(`/api/events/${eventData.id}/participants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'join' })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add guest');
+      }
+      
+      const created = await response.json();
+      
+      // Refresh participants list
+      const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json());
+      setParticipants(plist);
+      
+      console.log(`Successfully added ${created.guestName}`);
+      
+    } catch (error) {
+      console.error('Guest creation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add guest player';
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setAddingGuest(false);
+    }
+  };
+
   const team1 = useMemo(()=>team(1), [teams]);
   const team2 = useMemo(()=>team(2), [teams]);
 
@@ -498,6 +533,25 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
+            <button 
+              onClick={addGuest} 
+              disabled={addingGuest || !!eventData?.rosterLocked} 
+              className="text-xs border rounded px-3 py-1 disabled:opacity-50 hover:bg-green-50 hover:border-green-300 transition-colors flex items-center gap-1"
+            >
+              {addingGuest ? (
+                <>
+                  <div className="w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add Guest
+                </>
+              )}
+            </button>
           </div>
           <ul className="space-y-2">
             {participants.map((p)=> (
