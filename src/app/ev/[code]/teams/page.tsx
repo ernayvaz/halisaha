@@ -263,7 +263,7 @@ export default function TeamsPage() {
       const response = await fetch(`/api/events/${eventData.id}/participants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'join', guestName: '' }) // Empty name for auto-numbering
+        body: JSON.stringify({ mode: 'guest' })
       });
       
       if (!response.ok) {
@@ -562,11 +562,11 @@ export default function TeamsPage() {
                        onClick={() => showPlayerCard(p)}>
                     {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
                   </div>
-                  {p.isGuest ? (
-                    <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>
-                      {p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p) + 1}`}
-                    </span>
-                  ) : (
+                                      {p.isGuest ? (
+                     <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>
+                       {p.guestName || `Guest ${participants.filter(x=>x.isGuest).indexOf(p) + 1}`}
+                     </span>
+                    ) : (
                     <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>{p.user?.displayName || p.user?.handle}</span>
                   )}
                   {!p.isGuest && <MVPBadge p={p} />}

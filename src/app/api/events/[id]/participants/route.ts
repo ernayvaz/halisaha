@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const { userId, guestName, mode } = (await req.json()) as {
     userId?: string;
     guestName?: string;
-    mode: 'join' | 'view';
+    mode: 'join' | 'view' | 'guest';
   };
 
   const { id } = await context.params;
@@ -43,9 +43,35 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
   }
 
-  // For guests, guestName is optional – we'll generate a unique sequential name server-side
-  // Only error if neither userId nor guest intent is provided (mode enforces join semantics)
+  // Handle guest creation
+  if (mode === 'guest' || (guestName !== undefined && !userId)) {
+    // Get existing guests to determine numbering
+    const existingGuests = await prisma.participant.findMany({
+      where: { 
+        eventId: id,
+        isGuest: true 
+      },
+      orderBy: { joinedAt: 'asc' }
+    });
 
+    // Generate guest name with proper numbering
+    const guestNumber = existingGuests.length + 1;
+    const finalGuestName = guestName || `Guest ${guestNumber}`;
+
+    const guestParticipant = await prisma.participant.create({
+      data: {
+        eventId: id,
+        guestName: finalGuestName,
+        isGuest: true,
+        role: 'player',
+      },
+    });
+
+    await publish({ type: 'participants_updated', eventId: id });
+    return NextResponse.json(guestParticipant, { status: 201 });
+  }
+
+  // For regular users
   if (userId) {
     const exists = await prisma.participant.findFirst({ where: { eventId: id, userId } });
     if (exists) return NextResponse.json(exists);
@@ -57,34 +83,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   });
   const role = existingOwner ? 'player' : 'owner';
 
-  // Handle guest creation
-  if (!userId && guestName !== undefined) {
-    // Generate sequential guest name if not provided
-    let finalGuestName = guestName;
-    if (!finalGuestName) {
-      const existingGuests = await prisma.participant.findMany({
-        where: { eventId: id, isGuest: true },
-        orderBy: { joinedAt: 'asc' }
-      });
-      finalGuestName = `Guest ${existingGuests.length + 1}`;
-    }
-
-    const guestParticipant = await prisma.participant.create({
-      data: {
-        eventId: id,
-        guestName: finalGuestName,
-        isGuest: true,
-        role: 'player', // Guests are always players, not owners
-      },
-    });
-
-    // Keep publish for participants
-    await publish({ type: 'participants_updated', eventId: id });
-
-    return NextResponse.json(guestParticipant, { status: 201 });
-  }
-
-  // Regular user participant creation
+  // Create regular participant
   const participant = await prisma.participant.create({
     data: {
       eventId: id,
