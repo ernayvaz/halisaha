@@ -1,0 +1,12 @@
+{
+  "pages": {
+    "/api/teams/[teamId]/assignments/route": [
+      "static/chunks/aaea1e64ef7e0faa.js",
+      "static/chunks/91adb7bdb9870c6a.js",
+      "static/chunks/63dba52cde864d84.js",
+      "static/chunks/8082ab48faca5ea1.js",
+      "static/chunks/8de370c3cbabf345.js",
+      "static/chunks/turbopack-2b8668621c14ba0f.js"
+    ]
+  }
+}
