@@ -10,7 +10,7 @@ export const prisma: PrismaClient =
     log: ['error', 'warn'],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL || 'file:./dev.db'
+        url: process.env.DATABASE_URL || 'file:./prisma/dev.db'
       }
     }
   });
