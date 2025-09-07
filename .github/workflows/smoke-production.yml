@@ -1,0 +1,33 @@
+name: Smoke (Production)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [ main ]
+
+jobs:
+  smoke-production:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PRODUCTION_BASE: https://halisaha-ten.vercel.app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        working-directory: app
+        run: npm ci || npm i --no-audit --no-fund
+
+      - name: Run smoke against production
+        working-directory: app
+        env:
+          BASE: ${{ env.PRODUCTION_BASE }}
+        run: node scripts/smoke.mjs
+
