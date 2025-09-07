@@ -28,7 +28,6 @@ export default function TeamsPage() {
   const [lastGuestAddedAt, setLastGuestAddedAt] = useState<number>(0);
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
-  const [addingGuest, setAddingGuest] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Participant | null>(null);
   const [playerCard, setPlayerCard] = useState<any>(null);
   const [debounceTimers, setDebounceTimers] = useState<Record<string, NodeJS.Timeout>>({});
@@ -271,40 +270,6 @@ export default function TeamsPage() {
     setBusy(false);
   };
 
-  const addGuest = async () => {
-    if (!eventData || addingGuest) return;
-    
-    setAddingGuest(true);
-    
-    try {
-      const response = await fetch(`/api/events/${eventData.id}/participants`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'join' })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to add guest');
-      }
-      
-      const created = await response.json();
-      
-      // Refresh participants list
-      const plist = await fetch(`/api/events/${eventData.id}/participants`).then(r=>r.json());
-      setParticipants(plist);
-      
-      console.log(`Successfully added ${created.guestName}`);
-      
-    } catch (error) {
-      console.error('Guest creation error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add guest player';
-      alert(`Error: ${errorMessage}`);
-    } finally {
-      setAddingGuest(false);
-    }
-  };
-
   const team1 = useMemo(()=>team(1), [teams]);
   const team2 = useMemo(()=>team(2), [teams]);
 
@@ -533,25 +498,6 @@ export default function TeamsPage() {
         <div className="border rounded p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium">Players</h3>
-            <button 
-              onClick={addGuest} 
-              disabled={addingGuest || !!eventData?.rosterLocked} 
-              className="text-xs border rounded px-3 py-1 disabled:opacity-50 hover:bg-green-50 hover:border-green-300 transition-colors flex items-center gap-1"
-            >
-              {addingGuest ? (
-                <>
-                  <div className="w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin"></div>
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Add Guest
-                </>
-              )}
-            </button>
           </div>
           <ul className="space-y-2">
             {participants.map((p)=> (
@@ -661,47 +607,54 @@ export default function TeamsPage() {
         </div>
       </section>
 
-      {/* Minimal Dark Player Card Modal */}
+      {/* Modern Player Card Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
-          <div className="bg-gray-900 rounded-xl shadow-2xl max-w-xs w-full transform transition-all border border-gray-700" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlayer(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden transform transition-all" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="relative px-4 py-3 border-b border-gray-700">
+            <div className="relative bg-gradient-to-br from-blue-600 to-purple-700 px-6 py-8 text-white">
               <button 
                 onClick={() => setSelectedPlayer(null)} 
-                className="absolute top-2 right-2 w-6 h-6 rounded-full hover:bg-gray-700 flex items-center justify-center transition-colors"
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
               
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-green-600 text-white text-sm font-bold flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm text-white text-3xl font-bold flex items-center justify-center mx-auto mb-3 ring-4 ring-white/30">
                   {(selectedPlayer.isGuest ? (selectedPlayer.guestName || 'G') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle || 'P')).slice(0,1).toUpperCase()}
                 </div>
-                <div>
-                  <h4 className="font-medium text-white text-sm">
-                    {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
-                  </h4>
-                  {(selectedPlayer as any).role === 'owner' && (
-                    <span className="inline-flex items-center gap-1 bg-yellow-600 text-yellow-100 px-2 py-0.5 rounded text-xs">
-                      👑 Owner
-                    </span>
-                  )}
-                </div>
+                <h4 className="text-xl font-bold mb-1">
+                  {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
+                </h4>
+                {(selectedPlayer as any).role === 'owner' && (
+                  <div className="inline-flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-medium">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd" />
+                    </svg>
+                    Owner
+          </div>
+                )}
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-4 bg-gray-900">
+            <div className="p-6">
                              {selectedPlayer.isGuest ? (
-                 <div className="space-y-2">
-                   {/* Guest Stats */}
-                   <div className="grid grid-cols-4 gap-1">
-                     <div className="text-center p-2 bg-gray-800 rounded">
-                       <div className="text-sm font-bold text-red-400">3</div>
-                       <div className="text-xs text-gray-400">Pace</div>
+                 <div className="space-y-6">
+                   {/* Guest Stats Grid */}
+                   <div className="grid grid-cols-2 gap-4">
+                     {/* Pace */}
+                     <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 text-center">
+                       <div className="flex items-center justify-center mb-2">
+                         <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                         </svg>
+                       </div>
+                       <p className="text-xs text-red-700 font-medium mb-1">Pace</p>
+                       <p className="text-2xl font-bold text-red-800">3</p>
                      </div>
                      
                      {/* Shoot */}
