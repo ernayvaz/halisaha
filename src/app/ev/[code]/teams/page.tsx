@@ -7,7 +7,7 @@ import MatchInfo from '@/components/MatchInfo';
 
 
 type Event = { id: string; code: string; name?: string|null; rosterLocked?: boolean; lineupLocked?: boolean };
-type Participant = { id: string; isGuest: boolean; guestName: string|null; user?: { id: string; handle: string; displayName: string } };
+type Participant = { id: string; isGuest: boolean; guestName: string|null; role?: string; user?: { id: string; handle: string; displayName: string } };
 type Team = { id: string; eventId: string; index: 1|2; name: string; color: string; formation: string };
 type Assignment = { id: string; teamId: string; participantId: string; participant: Participant };
 type Position = { id: string; teamId: string; participantId: string; x: number; y: number };
@@ -461,6 +461,7 @@ export default function TeamsPage() {
     if (!isOwner || !eventData) return;
     
     const updateFormationIfNeeded = async (team: Team) => {
+      if (!team.formation) return; // Skip if no formation set
       const autoFormation = getAutoFormation(team.formation.split('-').map(n=>parseInt(n,10)).reduce((sum,n)=>sum+n,0));
       if (team.formation !== autoFormation) {
         await upsertTeam(team.index as 1|2, { formation: autoFormation });
@@ -942,7 +943,7 @@ export default function TeamsPage() {
                 <h4 className="text-xl font-bold mb-1">
                   {selectedPlayer.isGuest ? (selectedPlayer.guestName || 'Guest Player') : (selectedPlayer.user?.displayName || selectedPlayer.user?.handle)}
                 </h4>
-                {(selectedPlayer as any).role === 'owner' && (
+                {selectedPlayer.role === 'owner' && (
                   <div className="inline-flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-medium">
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217z" clipRule="evenodd" />
