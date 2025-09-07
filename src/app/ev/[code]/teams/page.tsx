@@ -125,6 +125,18 @@ export default function TeamsPage() {
       } else setIsOwner(false);
       await ensureFormationIfMissing(e.id, tlist, {});
       await refreshTeamData(e.id, tlist);
+      
+      // Load initial team assignments
+      const t1 = tlist.find((t: Team) => t.index === 1);
+      const t2 = tlist.find((t: Team) => t.index === 2);
+      if (t1) {
+        const assignments1 = await fetch(`/api/teams/${t1.id}/assignments`).then(r => r.json());
+        setAsgnTeam1(assignments1);
+      }
+      if (t2) {
+        const assignments2 = await fetch(`/api/teams/${t2.id}/assignments`).then(r => r.json());
+        setAsgnTeam2(assignments2);
+      }
     };
     run();
     // Event-level subscription (participants/teams/flags)
@@ -144,7 +156,11 @@ export default function TeamsPage() {
             setTeams(tlist);
             // Rewire team-level subscriptions on team changes
             setupTeamSubscriptions(tlist);
+            // Reload assignments when teams change
+            await refreshAssignments();
           })().catch(()=>{});
+        } else if (evt.type === 'assignments_updated') {
+          refreshAssignments().catch(() => {});
         } else if (evt.type === 'positions_updated') {
           if (team1?.id) fetch(`/api/teams/${team1.id}/positions`).then(r=>r.json()).then(setPosTeam1).catch(()=>{});
           if (team2?.id) fetch(`/api/teams/${team2.id}/positions`).then(r=>r.json()).then(setPosTeam2).catch(()=>{});
@@ -321,6 +337,122 @@ export default function TeamsPage() {
     return `Guest ${guestsBefore + 1}`;
   };
 
+  // Assign player to team
+  const assignToTeam = async (participantId: string, teamIndex: 1 | 2) => {
+    if (!eventData || !isOwner || busy) return;
+    
+    const targetTeam = teams.find(t => t.index === teamIndex);
+    if (!targetTeam) return;
+    
+    setBusy(true);
+    setOptimisticUpdate(Date.now());
+    
+    try {
+      const response = await fetch(`/api/teams/${targetTeam.id}/assignments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ participantId })
+      });
+
+      if (response.ok) {
+        // Reload team assignments
+        await refreshAssignments();
+      } else {
+        console.error('Failed to assign player to team');
+      }
+    } catch (error) {
+      console.error('Error assigning player to team:', error);
+    } finally {
+      setBusy(false);
+      setOptimisticUpdate(null);
+    }
+  };
+
+  // Remove player from team
+  const removeFromTeam = async (participantId: string) => {
+    if (!eventData || !isOwner || busy) return;
+    
+    // Find which team the player is assigned to
+    const team1Assignment = asgnTeam1.find(a => a.participantId === participantId);
+    const team2Assignment = asgnTeam2.find(a => a.participantId === participantId);
+    const assignment = team1Assignment || team2Assignment;
+    
+    if (!assignment) return;
+    
+    setBusy(true);
+    setOptimisticUpdate(Date.now());
+    
+    try {
+      const response = await fetch(`/api/teams/${assignment.teamId}/assignments?participantId=${participantId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        // Reload team assignments
+        await refreshAssignments();
+      } else {
+        console.error('Failed to remove player from team');
+      }
+    } catch (error) {
+      console.error('Error removing player from team:', error);
+    } finally {
+      setBusy(false);
+      setOptimisticUpdate(null);
+    }
+  };
+
+  // Remove player from event entirely
+  const removePlayer = async (participantId: string) => {
+    if (!eventData || !isOwner || busy) return;
+    
+    if (!confirm('Are you sure you want to remove this player from the event? This action cannot be undone.')) {
+      return;
+    }
+    
+    setBusy(true);
+    
+    try {
+      const response = await fetch(`/api/events/${eventData.id}/participants/${participantId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        // Reload participants and assignments
+        const [newParticipants] = await Promise.all([
+          fetch(`/api/events/${eventData.id}/participants`).then(r => r.json()),
+          refreshAssignments()
+        ]);
+        setParticipants(newParticipants);
+      } else {
+        console.error('Failed to remove player from event');
+      }
+    } catch (error) {
+      console.error('Error removing player from event:', error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Refresh team assignments
+  const refreshAssignments = async () => {
+    if (!teams.length) return;
+    
+    const t1 = teams.find(t => t.index === 1);
+    const t2 = teams.find(t => t.index === 2);
+    
+    if (t1) {
+      const assignments = await fetch(`/api/teams/${t1.id}/assignments`).then(r => r.json());
+      setAsgnTeam1(assignments);
+    }
+    
+    if (t2) {
+      const assignments = await fetch(`/api/teams/${t2.id}/assignments`).then(r => r.json());
+      setAsgnTeam2(assignments);
+    }
+  };
+
   const team1 = useMemo(()=>team(1), [teams]);
   const team2 = useMemo(()=>team(2), [teams]);
 
@@ -415,7 +547,9 @@ export default function TeamsPage() {
     const draggingRef = useRef<{ id: string } | null>(null);
     if (!team) return null;
     const labelFor = (pid: string) => {
-      const a = asgnTeam1.find(x=>x.participantId===pid);
+      const a1 = asgnTeam1.find(x=>x.participantId===pid);
+      const a2 = asgnTeam2.find(x=>x.participantId===pid);
+      const a = a1 || a2;
       if (!a) return 'Player';
       if (a.participant.isGuest) return a.participant.guestName || 'Guest';
       return a.participant.user?.displayName || a.participant.user?.handle || 'Player';
@@ -501,7 +635,7 @@ export default function TeamsPage() {
           </>
         )}
 
-        {asgnTeam1.map((a, i)=>{
+        {(team.index === 1 ? asgnTeam1 : asgnTeam2).map((a, i)=>{
           const posi = tokenPos(i, a.participantId);
           const label = labelFor(a.participantId);
           const part = a.participant;
@@ -561,23 +695,92 @@ export default function TeamsPage() {
             </button>
           </div>
           <ul className="space-y-2">
-            {participants.map((p, index)=> (
-              <li key={p.id} className="py-2 flex justify-between items-center">
-                <span className="flex items-center gap-1">
-                  <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center cursor-pointer" 
-                       title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}
-                       onClick={() => showPlayerCard(p)}>
-                    {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
+            {participants.map((p, index)=> {
+              const assignedToTeam1 = asgnTeam1.find(a => a.participantId === p.id);
+              const assignedToTeam2 = asgnTeam2.find(a => a.participantId === p.id);
+              const currentTeam = assignedToTeam1 ? 1 : assignedToTeam2 ? 2 : null;
+              
+              return (
+                <li key={p.id} className="py-2 flex justify-between items-center">
+                  <span className="flex items-center gap-1">
+                    <div className="w-6 h-6 rounded-full bg-green-600 text-white text-[11px] flex items-center justify-center cursor-pointer" 
+                         title={p.isGuest ? (p.guestName || 'Guest Player') : (p.user?.displayName || p.user?.handle)}
+                         onClick={() => showPlayerCard(p)}>
+                      {(p.isGuest ? (p.guestName || 'G') : (p.user?.displayName || p.user?.handle || 'P')).slice(0,1).toUpperCase()}
+                    </div>
+                    {p.isGuest ? (
+                      <span className="text-sm">{getGuestDisplayName(p, index)}</span>
+                    ) : (
+                      <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>{p.user?.displayName || p.user?.handle}</span>
+                    )}
+                    {!p.isGuest && <MVPBadge p={p} />}
+                    
+                    {/* Team Assignment Status */}
+                    {currentTeam && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        currentTeam === 1 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        Team {currentTeam}
+                      </span>
+                    )}
+                  </span>
+                  
+                  {/* Team Assignment Buttons */}
+                  <div className="flex items-center gap-1">
+                    {isOwner && !eventData?.rosterLocked && (
+                      <>
+                        <button
+                          onClick={() => assignToTeam(p.id, 1)}
+                          disabled={busy || currentTeam === 1}
+                          className={`px-2 py-1 text-xs rounded ${
+                            currentTeam === 1 
+                              ? 'bg-red-200 text-red-800 cursor-not-allowed' 
+                              : 'bg-red-100 hover:bg-red-200 text-red-700'
+                          } disabled:opacity-50`}
+                          title="Assign to Team 1"
+                        >
+                          T1
+                        </button>
+                        <button
+                          onClick={() => assignToTeam(p.id, 2)}
+                          disabled={busy || currentTeam === 2}
+                          className={`px-2 py-1 text-xs rounded ${
+                            currentTeam === 2 
+                              ? 'bg-yellow-200 text-yellow-800 cursor-not-allowed' 
+                              : 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'
+                          } disabled:opacity-50`}
+                          title="Assign to Team 2"
+                        >
+                          T2
+                        </button>
+                        {currentTeam && (
+                          <button
+                            onClick={() => removeFromTeam(p.id)}
+                            disabled={busy}
+                            className="px-2 py-1 text-xs rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50"
+                            title="Remove from team"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </>
+                    )}
+                    
+                    {/* Owner-only player removal */}
+                    {isOwner && (
+                      <button
+                        onClick={() => removePlayer(p.id)}
+                        disabled={busy}
+                        className="px-2 py-1 text-xs rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50 ml-1"
+                        title="Remove player from event"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </div>
-                  {p.isGuest ? (
-                    <span className="text-sm">{getGuestDisplayName(p, index)}</span>
-                  ) : (
-                    <span className="text-sm cursor-pointer hover:text-blue-600" onClick={() => showPlayerCard(p)}>{p.user?.displayName || p.user?.handle}</span>
-                  )}
-                  {!p.isGuest && <MVPBadge p={p} />}
-                </span>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
           
           {/* Add Guest Modal */}
