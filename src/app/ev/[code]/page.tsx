@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
-import { NextRequest } from 'next/server';
 
-export default function Page({ params }: { params: { code: string } }) {
-  return redirect(`/ev/${params.code}/landing`);
+export default async function Page({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  return redirect(`/ev/${code}/landing`);
 }
 
 
