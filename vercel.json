@@ -1,0 +1,13 @@
+{
+  "crons": [
+    { "path": "/api/cron/match-timers", "schedule": "0 9 * * *" }
+  ],
+  "buildCommand": "npm run build:safe",
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  }
+}
+
+
