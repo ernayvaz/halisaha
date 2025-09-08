@@ -4,8 +4,6 @@ import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rateLimit';
 import { cookies } from 'next/headers';
 
-export const runtime = 'nodejs';
-
 function shortCode(length = 6) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let out = '';
