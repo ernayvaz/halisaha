@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && (prisma migrate deploy || echo 'Migration skipped due to timeout') && next build --turbopack",
+    "build": "if [ \"$NODE_ENV\" = \"production\" ]; then prisma generate --schema=prisma/schema.prod.prisma && (prisma migrate deploy --schema=prisma/schema.prod.prisma || prisma db push --schema=prisma/schema.prod.prisma); else prisma generate --schema=prisma/schema.prisma; fi && next build --turbopack",
     "build:safe": "prisma generate && next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "if [ \"$NODE_ENV\" = \"production\" ]; then prisma generate --schema=prisma/schema.prod.prisma; else prisma generate --schema=prisma/schema.prisma; fi"
   },
   "dependencies": {
     "@prisma/client": "^6.15.0",
