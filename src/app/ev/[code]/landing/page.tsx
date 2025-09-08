@@ -199,14 +199,6 @@ export default function EventLandingPage() {
       <MatchInfo eventCode={params.code} title={eventData.name || 'Football Event'} />
       
       <div className="bg-white rounded-xl shadow-lg border overflow-hidden">
-        <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-8 text-white text-center">
-          <div className="text-4xl mb-3">⚽</div>
-          <h1 className="text-2xl font-bold mb-2">{eventData.name || 'Football Event'}</h1>
-          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-sm">
-            <span className="font-mono font-bold">{eventData.code}</span>
-          </div>
-        </div>
-
         <div className="p-6 space-y-6">
           {eventData.status === 'finished' && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -250,67 +242,7 @@ export default function EventLandingPage() {
               </button>
             </div>
 
-            {/* Add Guest Button */}
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => setShowAddGuest(true)}
-                className="text-green-600 hover:text-green-700 text-sm font-medium flex items-center justify-center gap-1 mx-auto"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Add Guest Player
-              </button>
-            </div>
-
-            {/* Add Guest Modal */}
-            {showAddGuest && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowAddGuest(false)}>
-                <div className="bg-white p-6 rounded-xl max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
-                  <h3 className="text-lg font-semibold mb-4">Add Guest Player</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Guest Name (optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={guestName}
-                        onChange={(e) => setGuestName(e.target.value)}
-                        placeholder="Leave empty for auto-naming"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                        maxLength={50}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        If left empty, will be named "Guest 1", "Guest 2", etc.
-                      </p>
-                    </div>
-                    <div className="flex gap-3 justify-end">
-                      <button
-                        onClick={() => {
-                          setShowAddGuest(false);
-                          setGuestName('');
-                        }}
-                        className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                        disabled={isAddingGuest}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleAddGuest}
-                        disabled={isAddingGuest}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
-                      >
-                        {isAddingGuest && (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        )}
-                        {isAddingGuest ? 'Adding...' : 'Add Guest'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Guest ekleme kaldırıldı: sadece Join & View */}
           </div>
 
           {/* Participants List */}
@@ -350,61 +282,10 @@ export default function EventLandingPage() {
             </div>
           )}
 
-          <div className="border-t pt-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="text-center">
-                <div className="font-medium text-gray-900">Status</div>
-                <div className="text-gray-500 capitalize">{eventData.status}</div>
-              </div>
-              <div className="text-center">
-                <div className="font-medium text-gray-900">Duration</div>
-                <div className="text-gray-500">{eventData.durationMinutes || 60} min</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-center">
-            <p className="text-xs text-gray-500">
-              Share this code with others: <span className="font-mono font-bold">{eventData.code}</span>
-            </p>
-          </div>
+          <div className="border-t pt-4 text-center text-xs text-gray-500">Code: <span className="font-mono font-bold">{eventData.code}</span></div>
         </div>
       </div>
-
-      {/* Quick navigation */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-        <button
-          onClick={() => router.push(`/ev/${params.code}/lobby`)}
-          className="p-3 border rounded-lg hover:bg-gray-50 text-center"
-        >
-          <div className="text-2xl mb-1">👥</div>
-          <div>Lobby</div>
-        </button>
-        
-        <button
-          onClick={() => router.push(`/ev/${params.code}/teams`)}
-          className="p-3 border rounded-lg hover:bg-gray-50 text-center"
-        >
-          <div className="text-2xl mb-1">⚽</div>
-          <div>Teams</div>
-        </button>
-        
-        <button
-          onClick={() => router.push(`/ev/${params.code}/lineup`)}
-          className="p-3 border rounded-lg hover:bg-gray-50 text-center"
-        >
-          <div className="text-2xl mb-1">📋</div>
-          <div>Lineup</div>
-        </button>
-        
-        <button
-          onClick={() => router.push(`/ev/${params.code}/history`)}
-          className="p-3 border rounded-lg hover:bg-gray-50 text-center"
-        >
-          <div className="text-2xl mb-1">📊</div>
-          <div>History</div>
-        </button>
-      </div>
+      {/* Landing sayfasında sadece Join/View ve katılımcı listesi */}
     </main>
   );
 }
