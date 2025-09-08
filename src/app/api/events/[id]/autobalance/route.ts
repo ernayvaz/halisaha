@@ -82,14 +82,16 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     return NextResponse.json({ error: 'event not found' }, { status: 404 });
   }
 
-  if (event.rosterLocked) {
-    return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
-  }
-
+  // Parse request body once up-front so we can distinguish preview vs apply
   const { method = 'greedy', apply = false } = (await req.json()) as {
     method?: 'greedy';
     apply?: boolean;
   };
+
+  // When roster is locked: allow previews, block only apply
+  if (event.rosterLocked && apply) {
+    return NextResponse.json({ error: 'roster_locked' }, { status: 403 });
+  }
 
   // Get all participants with their user stats
   const participants = await prisma.participant.findMany({
