@@ -80,6 +80,15 @@ const sleep = (ms) => new Promise((r)=>setTimeout(r, ms));
   log('join_participant', pj);
   if (!pj.ok || !pj.json.id) throw new Error('join_participant failed');
 
+  // 4.1) Add a guest participant to ensure autobalance has at least 2 participants
+  const guestJoin = await fetchWithTimeout(`${BASE}/api/events/${eventId}/participants`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: 'join' })
+  });
+  log('join_guest_participant', guestJoin);
+  if (!guestJoin.ok || !guestJoin.json.id) throw new Error('join_guest_participant failed');
+
   // 5) Upsert teams 1 and 2 (owner-only)
   const t1 = await fetchWithTimeout(`${BASE}/api/events/${eventId}/teams`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: 1, name: 'A' })
