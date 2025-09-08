@@ -5,11 +5,12 @@ import { prisma } from '@/lib/prisma';
 export async function GET(_req: NextRequest) {
   const cookieStore = await cookies();
   const deviceToken = cookieStore.get('device_token')?.value;
-  if (!deviceToken) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  // Return a benign anonymous payload instead of 401 to avoid noisy console errors on first load
+  if (!deviceToken) return NextResponse.json({ id: null, anonymous: true });
   const device = await prisma.device.findUnique({ where: { deviceToken }, select: { userId: true } });
-  if (!device?.userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!device?.userId) return NextResponse.json({ id: null, anonymous: true });
   const user = await prisma.user.findUnique({ where: { id: device.userId }, include: { badges: true } });
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!user) return NextResponse.json({ id: null, anonymous: true });
   return NextResponse.json({
     id: user.id,
     handle: user.handle,
