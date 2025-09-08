@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rateLimit';
 import { cookies } from 'next/headers';
